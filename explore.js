@@ -343,7 +343,6 @@ var staticExplanations = {
   "what is occam's razor?": "Occam's Razor is the principle that, when two explanations fit the evidence equally well, the simpler one is preferable. It doesn't mean the simplest answer is always right, but that unnecessary complexity should not be added without evidence. Scientists use it as a guide to avoid over-complicated hypotheses."
 };
 
-// API key : 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.
 
 function buildAIChips() {
   var container = document.getElementById('ai-chips');
