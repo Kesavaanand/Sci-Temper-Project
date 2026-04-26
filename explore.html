@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SciTemper — Explore Platform</title>
+  <link href="style.css" rel="stylesheet">
+</head>
+<body>
+
+<!-- Nav (matches site) -->
+<nav id="main-nav">
+  <div class="nav-top">
+    <a href="index.html" class="logo">Sci<span>Temper</span></a>
+    <div class="nav-top-right">
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="login-page.html">Login</a></li>
+        <li><a href="quiz.html#temper">Temper Scale</a></li>
+        <li><a href="index.html#cta">Contact</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!--  Hero -->
+<div class="ep-hero">
+  <div class="ep-hero-glow"></div>
+  <div class="ep-tag">Interactive Sandbox</div>
+  <h1>Experience the Platform<br><span>Before You Commit.</span></h1>
+  <p>A live demo of every core feature — mini quiz, dynamic profiling, myth-busting, and AI-powered explanations. No account needed.</p>
+</div>
+
+<!-- Feature pills -->
+<div class="feature-nav">
+  <a href="#mini-quiz"><button class="fnav-pill active" onclick="scrollTo('mini-quiz')">① Mini Assessment</button></a>
+  <a href="#profile-vis"><button class="fnav-pill" onclick="scrollTo('profile-vis')">② Scientific Profile</button></a>
+  <a href="#myth-fact"><button class="fnav-pill" onclick="scrollTo('myth-fact')">③ Myth vs Fact</button></a>
+  <a href="#ai-engine"><button class="fnav-pill" onclick="scrollTo('ai-engine')">④ AI Explanations</button></a>
+</div>
+
+<div class="ep-page">
+
+  <!--SECTION 1 — Mini Assessment Preview + Live Score-->
+  <div class="ep-section" id="mini-quiz">
+    <div class="ep-section-label">Feature 01 — Mini Assessment + Live Scoring</div>
+    <div class="ep-section-title">Try a Real Question Instantly</div>
+    <div class="ep-section-desc">
+      One question. Instant feedback. Live score tracking. This is exactly how the full 
+      assessment works — no guessing in the dark, every answer explained.
+    </div>
+
+    <div class="mini-quiz-card">
+      <div class="mq-header">
+        <div class="mq-badge" id="mq-cat-badge">Loading…</div>
+        <div class="mq-num" id="mq-q-of">Q 1 / 5</div>
+      </div>
+
+      <!-- Live score bar -->
+      <div class="live-score-bar">
+        <div class="live-score-fill" id="mq-score-fill"></div>
+      </div>
+
+      <div class="mq-question" id="mq-question">Loading question…</div>
+      <div class="mq-options" id="mq-options"></div>
+
+      <div class="mq-feedback" id="mq-feedback"></div>
+
+      <div class="mq-result-row" id="mq-result-row">
+        <div class="mq-result-text" id="mq-result-text"></div>
+        <button class="mq-next-btn" id="mq-next-btn" onclick="miniNextQ()">Next Question →</button>
+      </div>
+
+      <!-- Live progress ring + tally -->
+      <div class="live-ring-wrap" id="mq-ring-wrap" style="display:none;">
+        <div class="live-ring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="32" fill="none" stroke="#1e2d31" stroke-width="6"/>
+            <circle cx="40" cy="40" r="32" fill="none" stroke="#00e5c3" stroke-width="6"
+              stroke-dasharray="201" id="mq-ring-circle"
+              stroke-dashoffset="201" stroke-linecap="round"
+              transform="rotate(-90 40 40)" style="transition:stroke-dashoffset 0.7s ease"/>
+          </svg>
+        </div>
+        <div class="live-ring-label">
+          Score: <span id="mq-ring-score">0</span> / <span id="mq-ring-total">5</span><br>
+          <span style="font-size:0.72rem;color:#6a8891;">Updates after each answer</span>
+        </div>
+      </div>
+
+      <div class="score-tally" id="mq-tally" style="display:none;">
+        <div class="tally-item"><div class="tally-num" id="tally-correct">0</div><div class="tally-lbl">Correct</div></div>
+        <div class="tally-item"><div class="tally-num" style="color:#e05a7a" id="tally-wrong">0</div><div class="tally-lbl">Incorrect</div></div>
+        <div class="tally-item"><div class="tally-num" id="tally-pct">0%</div><div class="tally-lbl">Accuracy</div></div>
+      </div>
+    </div>
+
+    <!-- Final result card (shown after all 5) -->
+    <div id="mq-final" style="display:none; max-width:680px; margin-top:1.2rem;
+         background:var(--card); border:1px solid var(--border); padding:2rem; text-align:center;">
+      <div style="font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--teal);margin-bottom:0.8rem;">Assessment Complete</div>
+      <div style="font-size:2.4rem;font-weight:700;color:#ddedf0;" id="mq-final-score">0 / 5</div>
+      <div style="font-size:0.82rem;color:var(--muted);margin:0.5rem 0 1.5rem;" id="mq-final-level"></div>
+      <button class="mq-next-btn" onclick="miniReset()">Restart Mini Quiz ↺</button>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!--SECTION 2 — Dynamic Scientific Profile Visualisation-->
+  <div class="ep-section" id="profile-vis">
+    <div class="ep-section-label">Feature 02 — Dynamic Scientific Profile</div>
+    <div class="ep-section-title">Your Profile, Visualised in Real Time</div>
+    <div class="ep-section-desc">
+      The full platform builds your personal radar chart as you answer. 
+      Click "Simulate Profile Update" to see how answering well shifts your profile across all six dimensions.
+    </div>
+
+    <div class="profile-grid">
+      <!-- Radar -->
+      <div class="profile-radar-wrap">
+        <svg viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
+          <!-- Grid rings -->
+          <polygon points="160,20 280,90 280,230 160,300 40,230 40,90" fill="none" stroke="#1e2d31" stroke-width="1"/>
+          <polygon points="160,55 247,107.5 247,212.5 160,265 73,212.5 73,107.5" fill="none" stroke="#1e2d31" stroke-width="1"/>
+          <polygon points="160,90 214,121 214,193 160,224 106,193 106,121" fill="none" stroke="#1e2d31" stroke-width="1"/>
+          <polygon points="160,125 181,137.5 181,162.5 160,175 139,162.5 139,137.5" fill="none" stroke="#1e2d31" stroke-width="1"/>
+          <!-- Axes -->
+          <line x1="160" y1="160" x2="160" y2="20" stroke="#1e2d31" stroke-width="1"/>
+          <line x1="160" y1="160" x2="280" y2="90" stroke="#1e2d31" stroke-width="1"/>
+          <line x1="160" y1="160" x2="280" y2="230" stroke="#1e2d31" stroke-width="1"/>
+          <line x1="160" y1="160" x2="160" y2="300" stroke="#1e2d31" stroke-width="1"/>
+          <line x1="160" y1="160" x2="40" y2="230" stroke="#1e2d31" stroke-width="1"/>
+          <line x1="160" y1="160" x2="40" y2="90" stroke="#1e2d31" stroke-width="1"/>
+          <!-- Data polygon — morphs via JS -->
+          <polygon id="radar-poly"
+            points="160,125 181,137.5 181,162.5 160,175 139,162.5 139,137.5"
+            fill="rgba(0,229,195,0.12)" stroke="#00e5c3" stroke-width="2"
+            style="transition: points 0.9s ease"/>
+          <!-- Labels -->
+          <text x="160" y="13" text-anchor="middle" fill="#6a8891" font-size="9" font-family="monospace">Concepts</text>
+          <text x="289" y="88" text-anchor="start" fill="#6a8891" font-size="9" font-family="monospace">Critical</text>
+          <text x="289" y="235" text-anchor="start" fill="#6a8891" font-size="9" font-family="monospace">Stats</text>
+          <text x="160" y="315" text-anchor="middle" fill="#6a8891" font-size="9" font-family="monospace">Method</text>
+          <text x="30" y="235" text-anchor="end" fill="#6a8891" font-size="9" font-family="monospace">Society</text>
+          <text x="30" y="88" text-anchor="end" fill="#6a8891" font-size="9" font-family="monospace">Skepticism</text>
+        </svg>
+        <button class="profile-sim-btn" onclick="simulateProfile()">Simulate Profile Update ▶</button>
+      </div>
+
+      <!-- Dimension bars -->
+      <div>
+        <div class="profile-dims" id="profile-dims">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!--SECTION 3 — Myth vs Fact-->
+  <div class="ep-section" id="myth-fact">
+    <div class="ep-section-label">Feature 03 — Myth vs Fact Module</div>
+    <div class="ep-section-title">Bust the Myths. Know the Facts.</div>
+    <div class="ep-section-desc">
+      Common misconceptions people carry for years. Click "Reveal Fact" on any card 
+      to see the scientific reality — and why the myth persists.
+    </div>
+
+    <div class="myth-grid" id="myth-grid">
+      <!-- Injected by JS -->
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!--SECTION 4 — AI Explanation Engine (Live Claude API)-->
+  <div class="ep-section" id="ai-engine">
+    <div class="ep-section-label">Feature 04 — AI-Powered Explanation Engine</div>
+    <div class="ep-section-title">Ask. Understand. Not Just Memorise.</div>
+    <div class="ep-section-desc">
+      Our platform doesn't just mark you right or wrong — it explains the reasoning.
+      Type any scientific concept or question below and get an instant, intelligent breakdown.
+    </div>
+
+    <div class="ai-engine-card">
+      <div class="ai-chips" id="ai-chips">
+        <!-- Injected by JS -->
+      </div>
+      <div class="ai-input-row">
+        <input class="ai-input" id="ai-input" type="text" placeholder="e.g. Why can't antibiotics fight viruses?" maxlength="200" />
+        <button class="ai-ask-btn" id="ai-ask-btn" onclick="askAI()">Explain →</button>
+      </div>
+      <div class="ai-response-box" id="ai-response">
+        <span class="ai-response-placeholder">Your explanation will appear here…</span>
+      </div>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:0.6rem;">
+        Powered by Claude · Instant scientific explanations
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="explore-cta">
+    <div class="explore-cta-glow"></div>
+    <h2>Ready for the <span>Full Assessment?</span></h2>
+    <p>You've seen what SciTemper can do. Now measure your real scientific temper across all 12 dimensions.</p>
+    <div class="cta-btns">
+      <a href="quiz.html" class="btn-teal" onclick="checkLoginAndProceed(event)">Start Full Assessment →</a>
+      <a href="index.html" class="btn-outline">← Back to Home</a>
+    </div>
+  </div>
+
+</div><!-- /ep-page -->
+
+<script src="explore.js"></script>
+</body>
+</html>

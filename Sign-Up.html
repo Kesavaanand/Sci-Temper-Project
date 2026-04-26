@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up — SciTemper</title>
+    <link href="style.css" rel="stylesheet">
+    <style>
+        /* ── Auth page layout ─────────────────────────── */
+        .auth-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            position: relative;
+        }
+
+        .auth-grid-bg {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(#243034 1px, transparent 1px),
+                linear-gradient(90deg, #243034 1px, transparent 1px);
+            background-size: 60px 60px;
+            opacity: 0.25;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .auth-glow {
+            position: fixed;
+            top: 10%;
+            left: 30%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(0,229,195,0.09) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .auth-glow2 {
+            position: fixed;
+            bottom: 0;
+            right: 5%;
+            width: 350px;
+            height: 350px;
+            background: radial-gradient(circle, rgba(247,195,95,0.06) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Card ─────────────────────────────────────── */
+        .auth-card {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 440px;
+            background: #111618;
+            border: 1px solid #243034;
+            padding: 3rem 2.5rem;
+            animation: fadeUp 0.6s ease both;
+        }
+
+        .auth-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: #00e5c3;
+        }
+
+        /* ── Logo ─────────────────────────────────────── */
+        .auth-logo {
+            font-family: 'Fraunces', serif;
+            font-size: 1.6rem;
+            font-weight: 900;
+            color: #00e5c3;
+            letter-spacing: -0.03em;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            margin-bottom: 0.25rem;
+        }
+
+        .auth-logo span { color: #f7c35f; }
+
+        .auth-tagline {
+            text-align: center;
+            font-size: 0.68rem;
+            color: #6a8891;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-bottom: 2.5rem;
+        }
+
+        /* ── Page title ───────────────────────────────── */
+        .auth-title {
+            font-family: 'Fraunces', serif;
+            font-size: 1.7rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: #e8f0f2;
+            margin-bottom: 0.3rem;
+        }
+
+        .auth-title span { color: #00e5c3; }
+
+        /* ── Step dots ────────────────────────────────── */
+        .steps {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .step-dot {
+            width: 24px;
+            height: 3px;
+            background: #243034;
+            transition: background 0.3s, width 0.3s;
+        }
+
+        .step-dot.active {
+            background: #00e5c3;
+            width: 40px;
+        }
+
+        .step-label {
+            font-size: 0.65rem;
+            color: #6a8891;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-left: auto;
+        }
+
+        /* ── Form fields ──────────────────────────────── */
+        .field-group { margin-bottom: 1.2rem; }
+
+        label {
+            display: block;
+            font-size: 0.66rem;
+            color: #6a8891;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            margin-bottom: 0.45rem;
+        }
+
+        input {
+            width: 100%;
+            height: 46px;
+            padding: 0 1rem;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.82rem;
+            color: #e8f0f2;
+            background: #1a2124;
+            border: 1px solid #243034;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input::placeholder { color: #6a8891; }
+
+        input:focus {
+            border-color: #00e5c3;
+            box-shadow: 0 0 0 3px rgba(0,229,195,0.08);
+        }
+
+        /* ── Password strength bar ────────────────────── */
+        .strength-bar {
+            height: 3px;
+            background: #243034;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .strength-fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s, background 0.3s;
+        }
+
+        .strength-text {
+            font-size: 0.62rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-top: 0.35rem;
+            color: #6a8891;
+            min-height: 1em;
+        }
+
+        /* ── Buttons ──────────────────────────────────── */
+        .auth-btn {
+            width: 100%;
+            height: 46px;
+            border: none;
+            background: #00e5c3;
+            color: #0a0e0f;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+            margin-top: 0.5rem;
+        }
+
+        .auth-btn:hover {
+            background: #00c9aa;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,229,195,0.25);
+        }
+
+        .auth-btn:active { transform: scale(0.98); }
+
+        .auth-btn:disabled {
+            background: #243034;
+            color: #6a8891;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* ── Divider ──────────────────────────────────── */
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 1.8rem 0;
+        }
+
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #243034;
+        }
+
+        .auth-divider span {
+            font-size: 0.65rem;
+            color: #6a8891;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        /* ── Footer link ──────────────────────────────── */
+        .auth-footer {
+            text-align: center;
+            font-size: 0.74rem;
+            color: #6a8891;
+        }
+
+        .auth-footer a {
+            color: #00e5c3;
+            text-decoration: none;
+            font-weight: 700;
+            transition: color 0.2s;
+        }
+
+        .auth-footer a:hover { color: #f7c35f; }
+
+        /* ── Message banner ───────────────────────────── */
+        .auth-msg {
+            font-size: 0.74rem;
+            padding: 0.7rem 1rem;
+            margin-bottom: 1.2rem;
+            border-left: 3px solid;
+            display: none;
+            line-height: 1.5;
+        }
+
+        .auth-msg.error   { color: #e05a7a; background: rgba(224,90,122,0.07); border-color: #e05a7a; display: block; }
+        .auth-msg.success { color: #00e57a; background: rgba(0,229,122,0.07);  border-color: #00e57a; display: block; }
+        .auth-msg.info    { color: #00e5c3; background: rgba(0,229,195,0.07);  border-color: #00e5c3; display: block; }
+
+        /* ── OTP section ──────────────────────────────── */
+        #otp-section { display: none; }
+
+        .otp-hint {
+            font-size: 0.74rem;
+            color: #6a8891;
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            border: 1px solid #243034;
+            background: #1a2124;
+        }
+
+        .otp-hint strong { color: #00e5c3; font-weight: 400; }
+
+        #otp-input {
+            font-size: 1.6rem;
+            letter-spacing: 0.5em;
+            text-align: center;
+            height: 64px;
+            color: #00e5c3;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.7rem;
+            color: #6a8891;
+            text-decoration: none;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-top: 1rem;
+            transition: color 0.2s;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-family: 'Space Mono', monospace;
+            width: auto;
+            height: auto;
+            padding: 0;
+        }
+
+        .back-link:hover { color: #00e5c3; background: none; transform: none; box-shadow: none; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-grid-bg"></div>
+    <div class="auth-glow"></div>
+    <div class="auth-glow2"></div>
+
+    <div class="auth-page">
+        <div class="auth-card">
+
+            <!-- Logo -->
+            <a href="index.html" class="auth-logo">Sci<span>Temper</span></a>
+            <div class="auth-tagline">Create your account</div>
+
+            <!-- Title + steps -->
+            <div class="auth-title" id="auth-title">Join the <span>platform.</span></div>
+            <div class="steps">
+                <div class="step-dot active" id="dot-1"></div>
+                <div class="step-dot" id="dot-2"></div>
+                <span class="step-label" id="step-label">Step 1 of 2</span>
+            </div>
+
+            <!-- Status message -->
+            <div class="auth-msg" id="msg"></div>
+
+            <!-- ── STEP 1: Registration form ───────────── -->
+            <div id="register-section">
+                <div class="field-group">
+                    <label for="Username">Username</label>
+                    <input type="text" id="Username" placeholder="Choose a username" autocomplete="username">
+                </div>
+
+                <div class="field-group">
+                    <label for="Email">Email Address</label>
+                    <input type="email" id="Email" placeholder="your@email.com" autocomplete="email">
+                </div>
+
+                <div class="field-group">
+                    <label for="Password">Password</label>
+                    <input type="password" id="Password" placeholder="Min. 6 characters"
+                        autocomplete="new-password" oninput="checkStrength(this.value)">
+                    <div class="strength-bar">
+                        <div class="strength-fill" id="strength-fill"></div>
+                    </div>
+                    <div class="strength-text" id="strength-text"></div>
+                </div>
+
+                <button class="auth-btn" id="register-btn" onclick="handleRegister()">Create Account →</button>
+
+                <div class="auth-divider"><span>or</span></div>
+
+                <div class="auth-footer">
+                    Already have an account? <a href="login-page.html">Login →</a>
+                </div>
+            </div>
+
+            <!-- ── STEP 2: OTP verification ────────────── -->
+            <div id="otp-section">
+                <div class="otp-hint">
+                    An OTP has been sent to <strong id="otp-email-display"></strong>.
+                    Enter it below to verify your account.
+                </div>
+
+                <div class="field-group">
+                    <label for="otp-input">One-Time Password</label>
+                    <input type="text" id="otp-input" placeholder="000000" maxlength="6" autocomplete="one-time-code">
+                </div>
+
+                <button class="auth-btn" onclick="verifyOTP()">Verify & Register →</button>
+
+                <div style="text-align:center; margin-top:1.5rem;">
+                    <button class="back-link" onclick="resetToStep1()">← Start over</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        var BACKEND_URL = 'http://localhost:3000';
+        var registeredEmail = '';
+
+        function handleRegister() {
+            var username = document.getElementById('Username').value.trim();
+            var email    = document.getElementById('Email').value.trim();
+            var password = document.getElementById('Password').value.trim();
+            clearMsg();
+
+            if (!username || !email || !password) { showMsg('All fields are required.', 'error'); return; }
+            if (email.indexOf('@') === -1)         { showMsg('Please enter a valid email address.', 'error'); return; }
+            if (password.length < 6)               { showMsg('Password must be at least 6 characters.', 'error'); return; }
+
+            var btn = document.getElementById('register-btn');
+            btn.disabled = true;
+            btn.textContent = 'Creating account…';
+
+            fetch(BACKEND_URL + '/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false;
+                btn.textContent = 'Create Account →';
+
+                if (data.success) {
+                    registeredEmail = email;
+                    document.getElementById('otp-email-display').textContent = email;
+                    showMsg('Account created! Dev mode — OTP: ' + data.data.otp, 'info');
+                    goToStep2();
+                } else {
+                    showMsg(data.message || 'Registration failed.', 'error');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                btn.textContent = 'Create Account →';
+                showMsg('Cannot connect to server. Is the backend running?', 'error');
+            });
+        }
+
+        function verifyOTP() {
+            var otp = document.getElementById('otp-input').value.trim();
+            clearMsg();
+            if (!otp || otp.length < 6) { showMsg('Please enter the 6-digit OTP.', 'error'); return; }
+
+            fetch(BACKEND_URL + '/verify-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: registeredEmail, otp })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    showMsg('Registration successful! Redirecting to login…', 'success');
+                    setTimeout(function() { window.location.href = 'login-page.html'; }, 1500);
+                } else {
+                    showMsg(data.message || 'OTP verification failed.', 'error');
+                }
+            })
+            .catch(function() { showMsg('Cannot connect to server.', 'error'); });
+        }
+
+        function checkStrength(val) {
+            var fill = document.getElementById('strength-fill');
+            var text = document.getElementById('strength-text');
+            var s = 0;
+            if (val.length >= 6)       s++;
+            if (val.length >= 10)      s++;
+            if (/[A-Z]/.test(val))     s++;
+            if (/[0-9!@#$%^&*]/.test(val)) s++;
+
+            var widths  = ['0%', '25%', '50%', '75%', '100%'];
+            var colors  = ['#243034', '#e05a7a', '#f7c35f', '#5ae0a2', '#00e5c3'];
+            var labels  = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+            fill.style.width      = widths[s];
+            fill.style.background = colors[s];
+            text.textContent      = labels[s];
+            text.style.color      = colors[s];
+        }
+
+        function goToStep2() {
+            document.getElementById('register-section').style.display = 'none';
+            document.getElementById('otp-section').style.display = 'block';
+            document.getElementById('dot-1').classList.remove('active');
+            document.getElementById('dot-2').classList.add('active');
+            document.getElementById('step-label').textContent = 'Step 2 of 2';
+            document.getElementById('auth-title').innerHTML = 'Verify <span>email.</span>';
+        }
+
+        function resetToStep1() {
+            document.getElementById('register-section').style.display = 'block';
+            document.getElementById('otp-section').style.display = 'none';
+            document.getElementById('dot-1').classList.add('active');
+            document.getElementById('dot-2').classList.remove('active');
+            document.getElementById('step-label').textContent = 'Step 1 of 2';
+            document.getElementById('auth-title').innerHTML = 'Join the <span>platform.</span>';
+            clearMsg();
+        }
+
+        function showMsg(text, type) {
+            var el = document.getElementById('msg');
+            el.textContent = text;
+            el.className = 'auth-msg ' + type;
+        }
+
+        function clearMsg() {
+            var el = document.getElementById('msg');
+            el.className = 'auth-msg';
+            el.textContent = '';
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter') return;
+            if (document.getElementById('otp-section').style.display === 'block') verifyOTP();
+            else handleRegister();
+        });
+    </script>
+</body>
+</html>

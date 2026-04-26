@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SciTemper — Assessment</title>
+  <link href="style.css" rel="stylesheet">
+  <style>
+    /* ── Active temper level highlight ───────────── */
+    .temper-level.user-level-active {
+      position: relative;
+    }
+    .temper-level.user-level-active::after {
+      content: '▲ You';
+      position: absolute;
+      bottom: -22px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.55rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: inherit;
+      opacity: 0.9;
+    }
+    .temper-levels {
+      margin-bottom: 2.2rem;
+    }
+    .level-1.user-level-active { background: rgba(224,90,122,0.18); }
+    .level-2.user-level-active { background: rgba(224,154,90,0.18); }
+    .level-3.user-level-active { background: rgba(247,195,95,0.18); }
+    .level-4.user-level-active { background: rgba(90,224,162,0.18); }
+    .level-5.user-level-active { background: rgba(0,229,195,0.18); }
+  </style>
+</head>
+<body>
+
+<nav id="main-nav">
+  <div class="nav-top">
+    <a href="index.html" class="logo">Sci<span>Temper</span></a>
+    <div class="nav-top-right">
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="login-page.html">Login</a></li>
+        <li><a href="quiz.html#temper" class="active">Temper Scale</a></li>
+        <li><a href="index.html#cta">Contact</a></li>
+      </ul>
+    </div>
+    <div class="nav-mobile-drawer" id="mobile-drawer">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="#quiz">Quiz</a>
+      <a href="#temper">Temper Scale</a>
+      <a href="index.html#cta">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<br><br>
+
+<section class="quiz-section" id="quiz">
+  <div class="section-label">Try It Now</div>
+  <div class="section-title">Sample Assessment</div>
+  <p style="color:#6a8891; font-size:0.85rem; margin-top:1rem;">
+    Answer 5 questions to get an instant snapshot of your scientific temper.
+  </p>
+
+  <div class="quiz-card">
+    <div class="quiz-header">
+      <div class="quiz-meta">Scientific Temper Assessment</div>
+      <div class="quiz-meta" id="q-counter">Question 1 / 5</div>
+    </div>
+
+    <div class="quiz-progress-bar">
+      <div class="quiz-progress-fill" id="progress-fill" style="width:20%"></div>
+    </div>
+
+    <div class="quiz-body" id="quiz-body">
+      <div class="question-num" id="q-num"></div>
+      <div class="question-text" id="q-text"></div>
+      <div class="options-grid" id="options-grid"></div>
+      <div class="quiz-feedback" id="quiz-feedback"></div>
+    </div>
+
+    <div class="score-display" id="score-display">
+      <div class="score-ring">
+        <svg viewBox="0 0 140 140" width="140" height="140">
+          <circle cx="70" cy="70" r="58" fill="none" stroke="#1a2124" stroke-width="10"/>
+          <circle cx="70" cy="70" r="58" fill="none" stroke="#00e5c3" stroke-width="10"
+            stroke-dasharray="364" stroke-dashoffset="364" id="score-circle"
+            stroke-linecap="round"/>
+        </svg>
+        <div class="score-inner">
+          <div class="score-number" id="score-num">0</div>
+          <div class="score-label">/ 5</div>
+        </div>
+      </div>
+      <div class="score-level" id="score-level"></div>
+      <p class="score-desc" id="score-desc"></p>
+      <p style="font-size:0.72rem;color:#6a8891;margin-bottom:1rem;">
+        ↓ Scroll down to see your position on the Temper Scale
+      </p>
+      <button class="btn-primary" onclick="resetQuiz()">Try New Questions →</button>
+    </div>
+
+    <div class="quiz-footer" id="quiz-footer">
+      <div style="font-size:0.75rem; color:#6a8891;">Select an answer to continue</div>
+      <button class="btn-primary" id="next-btn" onclick="nextQuestion()" style="display:none;">
+        Next →
+      </button>
+    </div>
+  </div>
+</section>
+
+<section class="temper-section" id="temper">
+  <div class="section-label">The Scale</div>
+  <div class="section-title">The Scientific Temper Spectrum</div>
+
+  <p style="color:#6a8891; font-size:0.85rem; margin-top:1rem; margin-bottom:2rem; max-width:600px; line-height:1.8;">
+    Where do you fall on the spectrum? Your result will be highlighted automatically after
+    completing the quiz. Click any level to explore what it means.
+  </p>
+
+  <div class="temper-scale">
+    <div class="temper-levels">
+      <div class="temper-level level-1" onclick="showTemperDetail(0)"><span>Novice</span></div>
+      <div class="temper-level level-2" onclick="showTemperDetail(1)"><span>Curious</span></div>
+      <div class="temper-level level-3" onclick="showTemperDetail(2)"><span>Informed</span></div>
+      <div class="temper-level level-4" onclick="showTemperDetail(3)"><span>Analytical</span></div>
+      <div class="temper-level level-5" onclick="showTemperDetail(4)"><span>Scientific</span></div>
+    </div>
+    <div class="temper-detail" id="temper-detail">
+      <div>
+        <div class="temper-detail-title" id="td-title">Complete the quiz above</div>
+        <div class="temper-detail-desc" id="td-desc">
+          After finishing the assessment, your level will be highlighted here automatically.
+          You can also click any level to explore what it represents.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="main.js"></script>
+</body>
+</html>

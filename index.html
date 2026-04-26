@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SciTemper — Measure & Grow Your Scientific Mind</title>
+
+ <link href="style.css" rel="stylesheet">
+</head>
+<body>
+<nav id="main-nav">
+  <div class="nav-top">
+    <a href="#" class="logo">Sci<span>Temper</span></a>
+    <div class="nav-top-right">
+    <ul class="nav-links">
+      <li><a href="#" class="active">Home</a></li>
+      <li><a href="about.html">About</a></li>
+      <li><a href="login-page.html">Login</a></li>
+      <li><a href="quiz.html#temper">Temper Scale</a></li>
+      <li><a href="#cta">Contact</a></li>
+    </ul>
+  </div>
+  <div class="nav-mobile-drawer" id="mobile-drawer">
+    <a href="#">Home</a>
+    <a href="#assess">About</a>
+    <a href="#features">Features</a>
+    <a href="#quiz">Quiz</a>
+    <a href="#">Resources</a>
+    <a href="#temper">Temper Scale</a>
+    <a href="#cta">Contact</a>
+  </div>
+</nav>
+<section class="hero">
+  <div class="hero-grid-bg"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-glow2"></div>
+
+  <div class="hero-tag">Science Literacy Platform</div>
+
+  <h1>
+    Measure Your<br>
+    <span class="line2">Scientific Mind.</span><br>
+    <span class="line3">Then Sharpen It.</span>
+  </h1>
+
+  <p class="hero-sub">
+    SciTemper is an adaptive platform to evaluate scientific literacy, 
+    critical thinking, and empirical reasoning — then guide you on a 
+    personalised path to deeper scientific temper.
+  </p>
+
+  <div class="hero-actions">
+    <a href="/quiz.html" class="btn-primary" onclick="checkLoginAndProceed(event)">Take Free Assessment →</a>
+    <a href="explore.html" class="btn-secondary">Explore Platform</a>
+  </div>
+  <div class="hero-stats">
+    <div>
+      <div class="stat-num">12</div>
+      <div class="stat-label">Dimensions Assessed</div>
+    </div>
+    <div>
+      <div class="stat-num">500+</div>
+      <div class="stat-label">Curated Questions</div>
+    </div>
+    <div>
+      <div class="stat-num">5</div>
+      <div class="stat-label">Temper Levels</div>
+    </div>
+    <div>
+      <div class="stat-num">∞</div>
+      <div class="stat-label">Learning Paths</div>
+    </div>
+  </div>
+</section>
+<section class="assessment-section" id="assess">
+  <div class="section-label">Assessment Framework</div>
+  <div class="section-title">What We Measure</div>
+
+  <div class="assessment-grid">
+    <div>
+      <p style="color: #6a8891; font-size: 0.85rem; line-height: 1.8; margin-bottom: 2rem;">
+        Scientific temper goes far beyond memorising facts. Our framework maps 
+        six core dimensions of scientific thinking, from basic literacy to 
+        the disposition for evidence-based reasoning.
+      </p>
+
+      <div class="dimensions-list">
+        <div class="dimension-item">
+          <div class="dim-icon">🔬</div>
+          <div>
+            <div class="dim-title">Conceptual Literacy</div>
+            <div class="dim-desc">Understanding of core scientific concepts across physics, biology, chemistry, and earth sciences.</div>
+          </div>
+        </div>
+        <div class="dimension-item">
+          <div class="dim-icon">🧠</div>
+          <div>
+            <div class="dim-title">Critical Thinking</div>
+            <div class="dim-desc">Ability to evaluate arguments, identify logical fallacies, and assess the quality of evidence.</div>
+          </div>
+        </div>
+        <div class="dimension-item">
+          <div class="dim-icon">📊</div>
+          <div>
+            <div class="dim-title">Statistical Reasoning</div>
+            <div class="dim-desc">Interpretation of data, understanding of probability, risk, and correlation vs causation.</div>
+          </div>
+        </div>
+        <div class="dimension-item">
+          <div class="dim-icon">⚗️</div>
+          <div>
+            <div class="dim-title">Scientific Method</div>
+            <div class="dim-desc">Knowledge of hypothesis testing, experimental design, peer review, and replication.</div>
+          </div>
+        </div>
+        <div class="dimension-item">
+          <div class="dim-icon">🌐</div>
+          <div>
+            <div class="dim-title">Science-Society Interface</div>
+            <div class="dim-desc">Awareness of how science informs policy, technology, medicine, and environmental decisions.</div>
+          </div>
+        </div>
+        <div class="dimension-item">
+          <div class="dim-icon">🛡️</div>
+          <div>
+            <div class="dim-title">Misinformation Resistance</div>
+            <div class="dim-desc">Ability to identify pseudoscience, conspiracy thinking, and misinformation patterns.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="radar-container">
+      <div class="radar-box">
+        <svg viewBox="0 0 320 320" width="320" height="320">
+          <polygon points="160,20 280,90 280,230 160,300 40,230 40,90" fill="none" stroke="#243034" stroke-width="1"/>
+          <polygon points="160,55 247,107.5 247,212.5 160,265 73,212.5 73,107.5" fill="none" stroke="#243034" stroke-width="1"/>
+          <polygon points="160,90 214,121 214,193 160,224 106,193 106,121" fill="none" stroke="#243034" stroke-width="1"/>
+          <polygon points="160,125 181,137.5 181,162.5 160,175 139,162.5 139,137.5" fill="none" stroke="#243034" stroke-width="1"/>
+          <line x1="160" y1="160" x2="160" y2="20" stroke="#243034" stroke-width="1"/>
+          <line x1="160" y1="160" x2="280" y2="90" stroke="#243034" stroke-width="1"/>
+          <line x1="160" y1="160" x2="280" y2="230" stroke="#243034" stroke-width="1"/>
+          <line x1="160" y1="160" x2="160" y2="300" stroke="#243034" stroke-width="1"/>
+          <line x1="160" y1="160" x2="40" y2="230" stroke="#243034" stroke-width="1"/>
+          <line x1="160" y1="160" x2="40" y2="90" stroke="#243034" stroke-width="1"/>
+          <polygon points="160,45 262,108 268,218 160,285 58,210 55,102"
+            fill="rgba(0,229,195,0.12)" stroke="#00e5c3" stroke-width="2"/>
+          <circle cx="160" cy="45" r="5" fill="#00e5c3"/>
+          <circle cx="262" cy="108" r="5" fill="#00e5c3"/>
+          <circle cx="268" cy="218" r="5" fill="#f7c35f"/>
+          <circle cx="160" cy="285" r="5" fill="#00e5c3"/>
+          <circle cx="58" cy="210" r="5" fill="#e05a7a"/>
+          <circle cx="55" cy="102" r="5" fill="#00e5c3"/>
+          <circle cx="160" cy="160" r="4" fill="#243034"/>
+        </svg>
+        <div class="radar-label-top">
+          <span class="radar-axis-label">Concepts</span>
+        </div>
+        <div class="radar-label-tr">
+          <span class="radar-axis-label">Critical</span>
+        </div>
+        <div class="radar-label-right">
+          <span class="radar-axis-label">Stats</span>
+        </div>
+        <div class="radar-label-bottom">
+          <span class="radar-axis-label">Method</span>
+        </div>
+        <div class="radar-label-left">
+          <span class="radar-axis-label">Society</span>
+        </div>
+        <div class="radar-label-tl">
+          <span class="radar-axis-label">Skepticism</span>
+        </div>
+      </div>
+      <p class="radar-caption">
+        Your personalised scientific profile — revealing strengths to build on 
+        and gaps to close across all six dimensions.
+      </p>
+    </div>
+  </div>
+</section>
+<section class="cta-section" id="cta">
+  <div class="cta-glow"></div>
+  <div class="section-label" style="justify-content:center;">Join the Movement</div>
+  <div class="section-title" style="max-width:100%; margin:0 auto; text-align:center;">
+    India Needs Scientific Thinkers.<br>
+    <span style="color:#00e5c3;">Start With You.</span>
+  </div>
+  <p>
+    Article 51A(h) of the Indian Constitution calls upon every citizen to 
+    develop scientific temper. SciTemper makes that aspiration measurable and achievable.
+  </p>
+  <div class="cta-email">
+    <input type="email" class="cta-input" placeholder="Enter your email address" id="cta-email-input"/>
+    <button class="btn-primary" onclick="handleCTA()">Start Free →</button>
+  </div>
+  <div id="cta-success" style="display:none; margin-top:1rem; color:#00e5c3; font-size:0.82rem;">
+    ✓ You're on the list! Check your inbox for the assessment link.
+  </div>
+</section>
+<footer>
+  <div class="footer-logo">SciTemper</div>
+  <ul class="footer-links">
+    <li><a href="#">About</a></li>
+    <li><a href="#">Research</a></li>
+    <li><a href="#">Educators</a></li>
+    <li><a href="#">API</a></li>
+    <li><a href="#">Privacy</a></li>
+  </ul>
+  <div class="footer-copy">© 2026 SciTemper. Built for a more scientifically literate world.</div>
+</footer>
+<script src="/main.js"></script>
+</body>
+</html>
