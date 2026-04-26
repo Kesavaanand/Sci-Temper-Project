@@ -7,13 +7,15 @@ const express  = require('express');
 const bcrypt   = require('bcrypt');
 const cors     = require('cors');
 const mongoose = require('mongoose');
+const path     = require('path');
 
 const app  = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;  // ← Render sets PORT automatically
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname)));  // ← Serves all your HTML/CSS/JS files
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const OTP_EXPIRY_MS   = 5 * 60 * 1000;   // 5 minutes
@@ -21,7 +23,7 @@ const MAX_LOGIN_TRIES = 3;
 const SALT_ROUNDS     = 10;
 
 // ─── MongoDB Connection ────────────────────────────────────────────────────────
-mongoose.connect('mongodb://127.0.0.1:27017/scitemper')
+mongoose.connect(process.env.MONGODB_URI)  // ← Reads from Render environment variable
   .then(() => console.log('✅  Connected to MongoDB (scitemper)'))
   .catch(e  => { console.error('❌  MongoDB connection error:', e); process.exit(1); });
 
@@ -364,19 +366,13 @@ app.get('/users', async (req, res) => {
 });
 
 
-// ─── Health check ──────────────────────────────────────────────────────────────
-app.get('/', (req, res) => {
-  ok(res, 'SciTemper Auth API is running.', { port: PORT });
-});
-
-
 // ─── 404 catch-all ────────────────────────────────────────────────────────────
 app.use((req, res) => err(res, `Route ${req.method} ${req.path} not found.`, 404));
 
 
 // ─── Start server ──────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n✅  SciTemper Auth Server running on http://localhost:${PORT}`);
+  console.log(`\n✅  SciTemper Auth Server running on port ${PORT}`);
   console.log(`\n  Endpoints:`);
   console.log(`    POST /register          — Register new user`);
   console.log(`    POST /verify-otp        — Verify registration OTP`);
@@ -384,5 +380,5 @@ app.listen(PORT, () => {
   console.log(`    POST /verify-login-otp  — Login (step 2: OTP)`);
   console.log(`    POST /resend-otp        — Resend any OTP`);
   console.log(`    GET  /users             — List users (dev only)`);
-  console.log(`\n  Database: mongodb://127.0.0.1:27017/scitemper\n`);
+  console.log(`\n  Database: ${process.env.MONGODB_URI}\n`);
 });
