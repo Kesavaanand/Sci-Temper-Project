@@ -6,8 +6,7 @@
 const express  = require('express');
 const bcrypt   = require('bcrypt');
 const cors     = require('cors');
-const fs       = require('fs');
-const path     = require('path');
+const mongoose = require('mongoose');
 
 const app  = express();
 const PORT = 3000;
@@ -17,10 +16,24 @@ app.use(cors());
 app.use(express.json());
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-const USERS_FILE      = path.join(__dirname, 'users.json');
 const OTP_EXPIRY_MS   = 5 * 60 * 1000;   // 5 minutes
 const MAX_LOGIN_TRIES = 3;
 const SALT_ROUNDS     = 10;
+
+// ─── MongoDB Connection ────────────────────────────────────────────────────────
+mongoose.connect('mongodb://127.0.0.1:27017/scitemper')
+  .then(() => console.log('✅  Connected to MongoDB (scitemper)'))
+  .catch(e  => { console.error('❌  MongoDB connection error:', e); process.exit(1); });
+
+// ─── User Schema & Model ───────────────────────────────────────────────────────
+const userSchema = new mongoose.Schema({
+  username:     { type: String, required: true },
+  email:        { type: String, required: true, unique: true },
+  passwordHash: { type: String, required: true },
+  createdAt:    { type: Date,   default: Date.now },
+});
+
+const User = mongoose.model('User', userSchema);
 
 // ─── In-memory stores ──────────────────────────────────────────────────────────
 /**
@@ -40,20 +53,6 @@ const pendingUsers = {};
  * Shape: { [email]: { count, lockedUntil } }
  */
 const loginAttempts = {};
-
-// ─── File-based user storage helpers ──────────────────────────────────────────
-function loadUsers() {
-  if (!fs.existsSync(USERS_FILE)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-  } catch {
-    return {};
-  }
-}
-
-function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
-}
 
 // ─── OTP helpers ──────────────────────────────────────────────────────────────
 function generateOTP() {
@@ -137,12 +136,19 @@ app.post('/register', async (req, res) => {
     return err(res, 'Username must be at least 3 characters long.');
 
   // ── Check for duplicate email / username in confirmed users
-  const users = loadUsers();
-  if (Object.values(users).find(u => u.email === email.toLowerCase()))
-    return err(res, 'An account with this email already exists.');
+  try {
+    const emailExists = await User.findOne({ email: email.toLowerCase() });
+    if (emailExists)
+      return err(res, 'An account with this email already exists.');
 
-  if (Object.values(users).find(u => u.username.toLowerCase() === username.toLowerCase()))
-    return err(res, 'This username is already taken.');
+    const usernameExists = await User.findOne({
+      username: { $regex: new RegExp(`^${username.trim()}$`, 'i') },
+    });
+    if (usernameExists)
+      return err(res, 'This username is already taken.');
+  } catch {
+    return err(res, 'Server error while checking existing accounts.', 500);
+  }
 
   // ── Hash password and hold user in pending store
   try {
@@ -172,7 +178,7 @@ app.post('/register', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 //  ROUTE 2 — POST /verify-otp  (complete registration)
 // ══════════════════════════════════════════════════════════════════════════════
-app.post('/verify-otp', (req, res) => {
+app.post('/verify-otp', async (req, res) => {
   const { email, otp } = req.body;
 
   if (!email || !otp)
@@ -189,14 +195,16 @@ app.post('/verify-otp', (req, res) => {
   if (!pending)
     return err(res, 'No pending registration found. Please register again.');
 
-  const users = loadUsers();
-  users[normalEmail] = {
-    username:     pending.username,
-    email:        pending.email,
-    passwordHash: pending.passwordHash,
-    createdAt:    new Date().toISOString(),
-  };
-  saveUsers(users);
+  try {
+    await User.create({
+      username:     pending.username,
+      email:        pending.email,
+      passwordHash: pending.passwordHash,
+      createdAt:    new Date(),
+    });
+  } catch {
+    return err(res, 'Server error while saving account.', 500);
+  }
 
   // Cleanup
   delete pendingUsers[normalEmail];
@@ -218,10 +226,14 @@ app.post('/login', async (req, res) => {
   if (!username || !password)
     return err(res, 'Username and password are required.');
 
-  const users = loadUsers();
-  const user  = Object.values(users).find(
-    u => u.username.toLowerCase() === username.toLowerCase()
-  );
+  let user;
+  try {
+    user = await User.findOne({
+      username: { $regex: new RegExp(`^${username}$`, 'i') },
+    });
+  } catch {
+    return err(res, 'Server error during authentication.', 500);
+  }
 
   if (!user)
     return err(res, 'Invalid credentials.', 401);
@@ -270,7 +282,7 @@ app.post('/login', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 //  ROUTE 4 — POST /verify-login-otp  (step 2: OTP check → logged in)
 // ══════════════════════════════════════════════════════════════════════════════
-app.post('/verify-login-otp', (req, res) => {
+app.post('/verify-login-otp', async (req, res) => {
   const { email, otp } = req.body;
 
   if (!email || !otp)
@@ -285,8 +297,13 @@ app.post('/verify-login-otp', (req, res) => {
   // ── OTP valid
   clearOTP(normalEmail);
 
-  const users = loadUsers();
-  const user  = users[normalEmail];
+  let user;
+  try {
+    user = await User.findOne({ email: normalEmail });
+  } catch {
+    return err(res, 'Server error.', 500);
+  }
+
   if (!user)
     return err(res, 'User not found.', 404);
 
@@ -300,7 +317,7 @@ app.post('/verify-login-otp', (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 //  BONUS ROUTE — POST /resend-otp
 // ══════════════════════════════════════════════════════════════════════════════
-app.post('/resend-otp', (req, res) => {
+app.post('/resend-otp', async (req, res) => {
   const { email, type } = req.body;
 
   if (!email)       return err(res, 'Email is required.');
@@ -315,9 +332,13 @@ app.post('/resend-otp', (req, res) => {
 
   // For login: confirmed user must exist
   if (type === 'login') {
-    const users = loadUsers();
-    if (!users[normalEmail])
-      return err(res, 'No account found with this email.');
+    try {
+      const user = await User.findOne({ email: normalEmail });
+      if (!user)
+        return err(res, 'No account found with this email.');
+    } catch {
+      return err(res, 'Server error.', 500);
+    }
   }
 
   const otp = storeOTP(normalEmail, type);
@@ -333,12 +354,13 @@ app.post('/resend-otp', (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 //  BONUS ROUTE — GET /users  (dev only — list all registered users)
 // ══════════════════════════════════════════════════════════════════════════════
-app.get('/users', (req, res) => {
-  const users = loadUsers();
-  const safeUsers = Object.values(users).map(({ username, email, createdAt }) => ({
-    username, email, createdAt,
-  }));
-  ok(res, `${safeUsers.length} registered user(s).`, { users: safeUsers });
+app.get('/users', async (req, res) => {
+  try {
+    const users = await User.find({}, 'username email createdAt -_id');
+    ok(res, `${users.length} registered user(s).`, { users });
+  } catch {
+    return err(res, 'Server error while fetching users.', 500);
+  }
 });
 
 
@@ -362,5 +384,5 @@ app.listen(PORT, () => {
   console.log(`    POST /verify-login-otp  — Login (step 2: OTP)`);
   console.log(`    POST /resend-otp        — Resend any OTP`);
   console.log(`    GET  /users             — List users (dev only)`);
-  console.log(`\n  Data file: ${USERS_FILE}\n`);
+  console.log(`\n  Database: mongodb://127.0.0.1:27017/scitemper\n`);
 });
