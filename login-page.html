@@ -151,6 +151,10 @@
             margin-bottom: 0.45rem;
         }
 
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
         input {
             width: 100%;
             height: 46px;
@@ -329,24 +333,25 @@
         /* ── Forgot Password link ──────────────────── */
         .forgot-link {
             display: block;
-            text-align: right;
-            font-size: 0.68rem;
+            text-align: center;
+            font-size: 0.70rem;
             color: #6a8891;
             letter-spacing: 0.1em;
             text-transform: uppercase;
-            margin-top: -0.6rem;
-            margin-bottom: 1.2rem;
+            margin-top: 1rem;
+            margin-bottom: 0;
             text-decoration: none;
             cursor: pointer;
             transition: color 0.2s;
             background: none;
-            border: none;
+            border: 1px dashed #243034;
+            border-radius: 0;
             font-family: 'Space Mono', monospace;
             width: 100%;
-            padding: 0;
+            padding: 0.6rem 0;
             height: auto;
         }
-        .forgot-link:hover { color: #00e5c3; background: none; transform: none; box-shadow: none; }
+        .forgot-link:hover { color: #00e5c3; background: rgba(0,229,195,0.04); border-color: #00e5c3; transform: none; box-shadow: none; }
 
         /* ── Password strength meter ───────────────── */
         .strength-bar {
@@ -411,7 +416,8 @@
 
                 <button class="auth-btn" id="login-btn" onclick="handleLogin()">Login →</button>
 
-                <button class="forgot-link" onclick="showForgotPassword()">Forgot password?</button>
+                <div style="height: 1rem;"></div>
+                <button class="forgot-link" onclick="showForgotPassword()">🔑 Forgot password?</button>
 
                 <div class="auth-divider"><span>or</span></div>
 
