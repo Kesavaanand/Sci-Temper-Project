@@ -143,5 +143,20 @@
 </section>
 
 <script src="main.js"></script>
+<script>
+  // ── Guard: block non-logged-in users from Temper Scale page ──
+  (function() {
+    if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+      // Show a brief overlay then redirect
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:#0a0e0f;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;';
+      overlay.innerHTML = '<div style="color:#00e5c3;font-size:1.1rem;margin-bottom:1rem;">🔒 Login Required</div>'
+        + '<div style="color:#6a8891;font-size:0.82rem;margin-bottom:1.5rem;">You must be logged in to access the Temper Scale.</div>'
+        + '<div style="color:#e8f0f2;font-size:0.75rem;">Redirecting to login…</div>';
+      document.body.appendChild(overlay);
+      setTimeout(function() { window.location.href = 'login-page.html'; }, 1800);
+    }
+  })();
+</script>
 </body>
 </html>

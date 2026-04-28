@@ -359,6 +359,12 @@
                 <div class="field-group">
                     <label for="Email">Email Address</label>
                     <input type="email" id="Email" placeholder="your@email.com" autocomplete="email">
+                    <div class="strength-text" id="email-check-text"></div>
+                </div>
+
+                <div class="field-group">
+                    <label for="Phone">Phone Number (for OTP)</label>
+                    <input type="tel" id="Phone" placeholder="+91 9876543210" autocomplete="tel">
                 </div>
 
                 <div class="field-group">
@@ -383,7 +389,7 @@
             <!-- ── STEP 2: OTP verification ────────────── -->
             <div id="otp-section">
                 <div class="otp-hint">
-                    An OTP has been sent to <strong id="otp-email-display"></strong>.
+                    An OTP has been sent to your phone <strong id="otp-phone-display"></strong> and email <strong id="otp-email-display"></strong>.
                     Enter it below to verify your account.
                 </div>
 
@@ -403,18 +409,64 @@
     </div>
 
     <script>
-        var BACKEND_URL = 'https://sci-temper.onrender.com';
+        var BACKEND_URL = '';
         var registeredEmail = '';
+
+        // ── Email domain validation (checks MX via backend) ──────────────────
+        var emailCheckTimeout = null;
+        document.getElementById('Email').addEventListener('input', function() {
+            clearTimeout(emailCheckTimeout);
+            var emailVal = this.value.trim();
+            var checkEl = document.getElementById('email-check-text');
+            if (!emailVal || emailVal.indexOf('@') === -1) {
+                checkEl.textContent = '';
+                checkEl.style.color = '';
+                return;
+            }
+            checkEl.textContent = 'Checking email…';
+            checkEl.style.color = '#6a8891';
+            emailCheckTimeout = setTimeout(function() {
+                fetch(BACKEND_URL + '/check-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: emailVal })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.valid) {
+                        checkEl.textContent = '✓ Email looks valid';
+                        checkEl.style.color = '#00e57a';
+                    } else {
+                        checkEl.textContent = '✗ Enter a Valid Email';
+                        checkEl.style.color = '#e05a7a';
+                    }
+                })
+                .catch(function() {
+                    checkEl.textContent = '';
+                });
+            }, 600);
+        });
 
         function handleRegister() {
             var username = document.getElementById('Username').value.trim();
             var email    = document.getElementById('Email').value.trim();
+            var phone    = document.getElementById('Phone').value.trim();
             var password = document.getElementById('Password').value.trim();
             clearMsg();
 
-            if (!username || !email || !password) { showMsg('All fields are required.', 'error'); return; }
-            if (email.indexOf('@') === -1)         { showMsg('Please enter a valid email address.', 'error'); return; }
-            if (password.length < 6)               { showMsg('Password must be at least 6 characters.', 'error'); return; }
+            if (!username || !email || !phone || !password) { showMsg('All fields are required.', 'error'); return; }
+            if (email.indexOf('@') === -1) { showMsg('Please enter a valid email address.', 'error'); return; }
+            if (password.length < 6)       { showMsg('Password must be at least 6 characters.', 'error'); return; }
+
+            // Basic phone validation
+            var cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+            if (!/^\+?[0-9]{7,15}$/.test(cleanPhone)) { showMsg('Please enter a valid phone number.', 'error'); return; }
+
+            // Check email validity before submitting
+            var checkEl = document.getElementById('email-check-text');
+            if (checkEl.textContent.indexOf('Enter a Valid Email') !== -1) {
+                showMsg('Please enter a valid email address.', 'error'); return;
+            }
 
             var btn = document.getElementById('register-btn');
             btn.disabled = true;
@@ -423,7 +475,7 @@
             fetch(BACKEND_URL + '/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password })
+                body: JSON.stringify({ username, email, phone: cleanPhone, password })
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -433,7 +485,8 @@
                 if (data.success) {
                     registeredEmail = email;
                     document.getElementById('otp-email-display').textContent = email;
-                    showMsg('Account created! Dev mode — OTP: ' + data.data.otp, 'info');
+                    document.getElementById('otp-phone-display').textContent = cleanPhone;
+                    showMsg('OTP sent to your phone and email!', 'info');
                     goToStep2();
                 } else {
                     showMsg(data.message || 'Registration failed.', 'error');

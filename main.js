@@ -645,14 +645,40 @@ function showTemperDetail(idx) {
 
 // ─── CTA ──────────────────────────────────────────────────────────────────────
 function handleCTA() {
-  var email = document.getElementById('cta-email-input').value;
+  var email = document.getElementById('cta-email-input').value.trim();
   if (!email || email.indexOf('@') === -1) {
     document.getElementById('cta-email-input').style.borderColor = '#e05a7a';
     return;
   }
-  document.getElementById('cta-success').style.display            = 'block';
-  document.getElementById('cta-email-input').style.display        = 'none';
-  document.querySelector('.cta-email .btn-primary').style.display = 'none';
+  document.getElementById('cta-email-input').style.borderColor = '';
+
+  fetch('/send-assessment-link', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var successEl = document.getElementById('cta-success');
+    if (data.success) {
+      successEl.textContent = '✓ Assessment link sent! Check your inbox.';
+      successEl.style.display = 'block';
+      document.getElementById('cta-email-input').style.display = 'none';
+      document.querySelector('.cta-email .btn-primary').style.display = 'none';
+    } else {
+      var inputEl = document.getElementById('cta-email-input');
+      inputEl.style.borderColor = '#e05a7a';
+      successEl.textContent = '✗ ' + (data.message || 'Something went wrong.');
+      successEl.style.color = '#e05a7a';
+      successEl.style.display = 'block';
+    }
+  })
+  .catch(function() {
+    var successEl = document.getElementById('cta-success');
+    successEl.textContent = '✗ Could not connect to server.';
+    successEl.style.color = '#e05a7a';
+    successEl.style.display = 'block';
+  });
 }
 
 // ─── Login Guard ──────────────────────────────────────────────────────────────

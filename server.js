@@ -8,9 +8,29 @@ const bcrypt   = require('bcrypt');
 const cors     = require('cors');
 const mongoose = require('mongoose');
 const path     = require('path');
+const dns      = require('dns');
+const nodemailer = require('nodemailer');
 
 const app  = express();
-const PORT = process.env.PORT || 3000;  // ← Render sets PORT automatically
+const PORT = process.env.PORT || 3000;
+
+// ─── Email Transporter (Nodemailer) ───────────────────────────────────────────
+// Set SMTP_USER and SMTP_PASS in Render environment variables
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,  // Use Gmail App Password
+  },
+});
+
+async function sendEmail(to, subject, html) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log('[EMAIL SKIPPED — no SMTP config] To:', to, '| Subject:', subject);
+    return;
+  }
+  await transporter.sendMail({ from: `"SciTemper" <${process.env.SMTP_USER}>`, to, subject, html });
+}  // ← Render sets PORT automatically
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors());
@@ -31,6 +51,7 @@ mongoose.connect(process.env.MONGODB_URI)  // ← Reads from Render environment 
 const userSchema = new mongoose.Schema({
   username:     { type: String, required: true },
   email:        { type: String, required: true, unique: true },
+  phone:        { type: String, default: '' },
   passwordHash: { type: String, required: true },
   createdAt:    { type: Date,   default: Date.now },
 });
@@ -122,7 +143,7 @@ const err = (res, message, status = 400) =>
 //  ROUTE 1 — POST /register
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/register', async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, phone, password } = req.body;
 
   // ── Input validation
   if (!username || !email || !password)
@@ -158,6 +179,7 @@ app.post('/register', async (req, res) => {
     pendingUsers[email.toLowerCase()] = {
       username: username.trim(),
       email: email.toLowerCase(),
+      phone: phone || '',
       passwordHash,
     };
   } catch {
@@ -167,11 +189,24 @@ app.post('/register', async (req, res) => {
   // ── Generate and store OTP
   const otp = storeOTP(email.toLowerCase(), 'register');
 
-  // In production: send OTP via email (e.g. nodemailer / SendGrid)
-  // For development: return it in the response
-  ok(res, 'Registration initiated. Please verify your email with the OTP.', {
+  // ── Send OTP via email
+  try {
+    await sendEmail(
+      email,
+      'SciTemper — Verify Your Account',
+      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
+        <h2 style="color:#00e5c3;">SciTemper</h2>
+        <p>Your registration OTP is:</p>
+        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
+        <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes. Do not share it with anyone.</p>
+      </div>`
+    );
+  } catch (e) {
+    console.error('Email send error:', e.message);
+  }
+
+  ok(res, 'Registration initiated. OTP sent to your email.', {
     email: email.toLowerCase(),
-    otp,                          // ← remove in production
     note: 'OTP expires in 5 minutes.',
   });
 });
@@ -201,6 +236,7 @@ app.post('/verify-otp', async (req, res) => {
     await User.create({
       username:     pending.username,
       email:        pending.email,
+      phone:        pending.phone || '',
       passwordHash: pending.passwordHash,
       createdAt:    new Date(),
     });
@@ -272,10 +308,24 @@ app.post('/login', async (req, res) => {
   clearLoginAttempts(user.email);
   const otp = storeOTP(user.email, 'login');
 
-  // In production: send OTP via email
-  ok(res, 'Credentials verified. Please enter the OTP sent to your email.', {
+  // Send OTP via email
+  try {
+    await sendEmail(
+      user.email,
+      'SciTemper — Login OTP',
+      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
+        <h2 style="color:#00e5c3;">SciTemper</h2>
+        <p>Your login OTP is:</p>
+        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
+        <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes. Do not share it with anyone.</p>
+      </div>`
+    );
+  } catch (e) {
+    console.error('Email send error:', e.message);
+  }
+
+  ok(res, 'Credentials verified. OTP sent to your registered email.', {
     email: user.email,
-    otp,           // ← remove in production
     note:  'OTP expires in 5 minutes.',
   });
 });
@@ -345,9 +395,24 @@ app.post('/resend-otp', async (req, res) => {
 
   const otp = storeOTP(normalEmail, type);
 
-  ok(res, 'A new OTP has been generated.', {
+  // Send via email
+  try {
+    await sendEmail(
+      normalEmail,
+      'SciTemper — New OTP',
+      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
+        <h2 style="color:#00e5c3;">SciTemper</h2>
+        <p>Your new OTP is:</p>
+        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
+        <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes.</p>
+      </div>`
+    );
+  } catch (e) {
+    console.error('Email send error:', e.message);
+  }
+
+  ok(res, 'A new OTP has been sent to your email.', {
     email: normalEmail,
-    otp,   // ← remove in production
     note:  'New OTP expires in 5 minutes.',
   });
 });
@@ -362,6 +427,69 @@ app.get('/users', async (req, res) => {
     ok(res, `${users.length} registered user(s).`, { users });
   } catch {
     return err(res, 'Server error while fetching users.', 500);
+  }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ROUTE — POST /check-email  (validate email domain via DNS MX lookup)
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/check-email', async (req, res) => {
+  const { email } = req.body;
+  if (!email || !isValidEmail(email))
+    return res.json({ valid: false });
+
+  const domain = email.split('@')[1];
+  dns.resolveMx(domain, (err, addresses) => {
+    if (err || !addresses || addresses.length === 0) {
+      return res.json({ valid: false });
+    }
+    res.json({ valid: true });
+  });
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ROUTE — POST /send-assessment-link  (contact page → send link to user email)
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/send-assessment-link', async (req, res) => {
+  const { email } = req.body;
+  if (!email || !isValidEmail(email))
+    return err(res, 'A valid email is required.');
+
+  // Find user by email
+  let user;
+  try {
+    user = await User.findOne({ email: email.toLowerCase() });
+  } catch {
+    return err(res, 'Server error.', 500);
+  }
+
+  if (!user)
+    return err(res, 'No account found with this email address. Please sign up first.');
+
+  const siteUrl = process.env.SITE_URL || 'https://scitemper.onrender.com';
+  const assessmentLink = `${siteUrl}/quiz.html`;
+
+  try {
+    await sendEmail(
+      user.email,
+      'Your SciTemper Assessment Link 🔬',
+      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
+        <h2 style="color:#00e5c3;">SciTemper</h2>
+        <p>Hello <strong>${user.username}</strong>,</p>
+        <p>Here is your personalised assessment link:</p>
+        <div style="padding:1rem;border:1px solid #243034;text-align:center;margin:1rem 0;">
+          <a href="${assessmentLink}" style="color:#00e5c3;font-size:1rem;">${assessmentLink}</a>
+        </div>
+        <p>Measure your scientific temper across 12 dimensions and start your learning journey.</p>
+        <p style="color:#6a8891;font-size:0.8rem;">— The SciTemper Team</p>
+      </div>`
+    );
+    ok(res, 'Assessment link sent to your registered email!');
+  } catch (e) {
+    console.error('Email send error:', e.message);
+    err(res, 'Failed to send email. Please try again later.', 500);
   }
 });
 

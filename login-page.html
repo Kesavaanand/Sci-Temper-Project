@@ -394,7 +394,7 @@
     </div>
 
     <script>
-        var BACKEND_URL = 'https://sci-temper.onrender.com';
+        var BACKEND_URL = '';
         var userEmail = '';
 
         function handleLogin() {
@@ -421,7 +421,7 @@
                 if (data.success) {
                     userEmail = data.data.email;
                     document.getElementById('otp-email-display').textContent = userEmail;
-                    showMsg('OTP sent! Dev mode — OTP: ' + data.data.otp, 'info');
+                    showMsg('OTP sent to your registered email. Please check your inbox.', 'info');
                     goToStep2();
                 } else {
                     showMsg(data.message || 'Login failed.', 'error');
