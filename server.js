@@ -132,10 +132,25 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
+// ─── OTP Schema & Model (persisted — survives server restarts) ─────────────────
+const otpSchema = new mongoose.Schema({
+  email:   { type: String, required: true, unique: true },
+  otp:     { type: String, required: true },
+  type:    { type: String, required: true },
+  expires: { type: Number, required: true },
+  verified: { type: Boolean, default: false },
+});
+const OTPRecord = mongoose.model('OTPRecord', otpSchema);
+
 // ─── In-memory stores ──────────────────────────────────────────────────────────
 /**
  * otpStore  — holds active OTPs (registration & login)
  * Shape: { [email]: { otp, expires, type: 'register'|'login' } }
+ *
+ * ⚠️  WARNING: This store is in-memory only. If the server restarts (e.g. Render
+ * free-tier spin-down), all pending OTPs are lost and users will see
+ * "OTP not found" even if they enter the correct code. For production,
+ * persist OTPs in MongoDB or Redis.
  */
 const otpStore = {};
 
@@ -151,29 +166,46 @@ const pendingUsers = {};
  */
 const loginAttempts = {};
 
-// ─── OTP helpers ──────────────────────────────────────────────────────────────
+// ─── OTP helpers (DB-backed — survives server restarts) ───────────────────────
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-function storeOTP(email, type) {
+async function storeOTP(email, type) {
   const otp     = generateOTP();
   const expires = Date.now() + OTP_EXPIRY_MS;
+  await OTPRecord.findOneAndUpdate(
+    { email },
+    { otp, type, expires, verified: false },
+    { upsert: true, new: true }
+  );
+  // Keep in-memory mirror for backward compat with sync checks
   otpStore[email] = { otp, expires, type };
   return otp;
 }
 
-function validateOTP(email, otp, expectedType) {
-  const entry = otpStore[email];
-  if (!entry)                         return { valid: false, reason: 'No OTP found for this email' };
-  if (entry.type !== expectedType)    return { valid: false, reason: 'OTP type mismatch' };
-  if (Date.now() > entry.expires)     return { valid: false, reason: 'OTP has expired' };
-  if (entry.otp !== String(otp))      return { valid: false, reason: 'Incorrect OTP' };
+async function validateOTP(email, otp, expectedType) {
+  // Check DB first (survives restarts), fall back to in-memory
+  let entry = null;
+  try {
+    const record = await OTPRecord.findOne({ email });
+    if (record) {
+      entry = { otp: record.otp, expires: record.expires, type: record.type, verified: record.verified };
+    }
+  } catch (_) {
+    // DB unavailable — fall back to in-memory store
+    entry = otpStore[email] || null;
+  }
+  if (!entry)                           return { valid: false, reason: 'OTP not found — please request a new one.' };
+  if (entry.type !== expectedType)      return { valid: false, reason: 'OTP type mismatch — please request a new OTP.' };
+  if (Date.now() > entry.expires)       return { valid: false, reason: 'OTP has expired. Please request a new one.' };
+  if (entry.otp !== String(otp).trim()) return { valid: false, reason: 'Incorrect OTP. Please check and try again.' };
   return { valid: true };
 }
 
-function clearOTP(email) {
+async function clearOTP(email) {
   delete otpStore[email];
+  try { await OTPRecord.deleteOne({ email }); } catch (_) {}
 }
 
 // ─── Rate-limiting helpers ─────────────────────────────────────────────────────
@@ -261,14 +293,14 @@ app.post('/register', async (req, res) => {
   }
 
   // ── Generate and store OTP
-  const otp = storeOTP(email.toLowerCase(), 'register');
+  const otp = await storeOTP(email.toLowerCase(), 'register');
 
   // ── Send OTP via both SMS and email
   let regChannels = ['email'];
   try {
     const result = await sendOTP(
       phone || '',
-      email,
+      email.toLowerCase(),
       otp,
       'Verify Your Account'
     );
@@ -302,7 +334,7 @@ app.post('/verify-otp', async (req, res) => {
     return err(res, 'No pending registration found. Please register again.');
 
   // ── Check local OTP (email channel) first
-  const localResult = validateOTP(normalEmail, otp, 'register');
+  const localResult = await validateOTP(normalEmail, otp, 'register');
 
   // ── If local fails AND user has a phone, also check Twilio (SMS channel)
   let verified = localResult.valid;
@@ -336,7 +368,7 @@ app.post('/verify-otp', async (req, res) => {
 
   // Cleanup
   delete pendingUsers[normalEmail];
-  clearOTP(normalEmail);
+  await clearOTP(normalEmail);
 
   ok(res, 'Account verified successfully! You can now log in.', {
     username: pending.username,
@@ -396,7 +428,7 @@ app.post('/login', async (req, res) => {
 
   // ── Credentials correct — generate login OTP
   clearLoginAttempts(user.email);
-  const otp = storeOTP(user.email, 'login');
+  const otp = await storeOTP(user.email, 'login');
 
   // Send OTP via both SMS and email
   let loginChannels = ['email'];
@@ -443,7 +475,7 @@ app.post('/verify-login-otp', async (req, res) => {
     return err(res, 'User not found.', 404);
 
   // ── Check local OTP (email channel) first
-  const localResult = validateOTP(normalEmail, otp, 'login');
+  const localResult = await validateOTP(normalEmail, otp, 'login');
 
   // ── If local fails AND user has a phone, also check Twilio (SMS channel)
   let verified = localResult.valid;
@@ -464,7 +496,7 @@ app.post('/verify-login-otp', async (req, res) => {
     return err(res, localResult.reason || 'Incorrect OTP.', 401);
 
   // ── OTP valid
-  clearOTP(normalEmail);
+  await clearOTP(normalEmail);
 
   ok(res, 'Login successful! Welcome back.', {
     username: user.username,
@@ -500,7 +532,7 @@ app.post('/resend-otp', async (req, res) => {
     }
   }
 
-  const otp = storeOTP(normalEmail, type);
+  const otp = await storeOTP(normalEmail, type);
 
   // Send OTP: SMS first, email fallback
   // Retrieve phone for confirmed users (login resend); pending users may have phone too
@@ -584,7 +616,7 @@ app.post('/forgot-password', async (req, res) => {
     return ok(res, 'If that email is registered, a reset code has been sent.');
   }
 
-  const otp = storeOTP(normalEmail, 'reset');
+  const otp = await storeOTP(normalEmail, 'reset');
 
   try {
     await sendEmail(
@@ -619,14 +651,14 @@ app.post('/verify-reset-otp', async (req, res) => {
     return err(res, 'Email and OTP are required.');
 
   const normalEmail = email.toLowerCase();
-  const result = validateOTP(normalEmail, otp, 'reset');
+  const result = await validateOTP(normalEmail, otp, 'reset');
 
   if (!result.valid)
     return err(res, result.reason || 'Invalid or expired reset code.', 401);
 
-  // Mark OTP as verified but keep it in store so /reset-password can confirm
-  // We tag it as verified to prevent reuse without completing the flow
-  otpStore[normalEmail].verified = true;
+  // Mark OTP as verified in both DB and in-memory store
+  try { await OTPRecord.findOneAndUpdate({ email: normalEmail }, { verified: true }); } catch (_) {}
+  if (otpStore[normalEmail]) otpStore[normalEmail].verified = true;
 
   ok(res, 'Reset code verified. You may now set a new password.');
 });
@@ -646,8 +678,12 @@ app.post('/reset-password', async (req, res) => {
 
   const normalEmail = email.toLowerCase();
 
-  // Ensure OTP was verified in this session
-  const entry = otpStore[normalEmail];
+  // Ensure OTP was verified in this session (check DB first, then in-memory)
+  let entry = otpStore[normalEmail] || null;
+  try {
+    const dbRecord = await OTPRecord.findOne({ email: normalEmail });
+    if (dbRecord) entry = { type: dbRecord.type, verified: dbRecord.verified, expires: dbRecord.expires };
+  } catch (_) {}
   if (!entry || entry.type !== 'reset' || !entry.verified)
     return err(res, 'Reset session expired or invalid. Please start over.', 401);
 
@@ -673,7 +709,7 @@ app.post('/reset-password', async (req, res) => {
     return err(res, 'Server error while updating password.', 500);
   }
 
-  clearOTP(normalEmail);
+  await clearOTP(normalEmail);
   console.log(`[Password Reset] Completed for: ${normalEmail}`);
 
   ok(res, 'Password reset successfully! You can now log in with your new password.');
