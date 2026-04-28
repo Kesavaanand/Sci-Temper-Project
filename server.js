@@ -10,6 +10,7 @@ const mongoose = require('mongoose');
 const path     = require('path');
 const dns      = require('dns');
 const nodemailer = require('nodemailer');
+const twilio     = require('twilio');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -31,6 +32,58 @@ async function sendEmail(to, subject, html) {
   }
   await transporter.sendMail({ from: `"SciTemper" <${process.env.SMTP_USER}>`, to, subject, html });
 }  // ← Render sets PORT automatically
+
+// ─── Twilio Verify Client ─────────────────────────────────────────────────────
+// Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in Render environment variables
+const TWILIO_SERVICE_SID = 'VAf66ad6a5c075d0b65b847961ec941b85';
+let twilioClient = null;
+if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+  twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  console.log('✅  Twilio client initialised');
+} else {
+  console.warn('⚠️   Twilio env vars not set — SMS will be skipped, falling back to email');
+}
+
+/**
+ * sendOTP — tries SMS via Twilio Verify first; falls back to email.
+ * When SMS succeeds, Twilio generates the code and sends it to the phone number.
+ * When SMS fails (no phone / Twilio error), our locally generated OTP goes by email.
+ *
+ * @param {string} phone  — E.164 number e.g. "+919876543210" (may be empty string)
+ * @param {string} email  — user email (fallback destination)
+ * @param {string} otp    — locally generated OTP (used only for the email fallback)
+ * @param {string} label  — display label e.g. 'Verify Your Account' or 'Login OTP'
+ * @returns {{ channel: 'sms'|'email' }}
+ */
+async function sendOTP(phone, email, otp, label = 'OTP') {
+  // ── Try SMS first
+  if (phone && twilioClient) {
+    try {
+      await twilioClient.verify.v2
+        .services(TWILIO_SERVICE_SID)
+        .verifications
+        .create({ to: phone, channel: 'sms' });
+      console.log(`[SMS OTP sent] To: ${phone}`);
+      return { channel: 'sms' };
+    } catch (smsErr) {
+      console.warn(`[SMS failed, falling back to email] ${smsErr.message}`);
+    }
+  }
+
+  // ── Fallback: email
+  await sendEmail(
+    email,
+    `SciTemper — ${label}`,
+    `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
+      <h2 style="color:#00e5c3;">SciTemper</h2>
+      <p>Your OTP is:</p>
+      <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
+      <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes. Do not share it with anyone.</p>
+    </div>`
+  );
+  console.log(`[Email OTP sent] To: ${email}`);
+  return { channel: 'email' };
+}
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors());
@@ -189,24 +242,23 @@ app.post('/register', async (req, res) => {
   // ── Generate and store OTP
   const otp = storeOTP(email.toLowerCase(), 'register');
 
-  // ── Send OTP via email
+  // ── Send OTP: SMS first, email fallback
+  let regChannel = 'email';
   try {
-    await sendEmail(
+    const result = await sendOTP(
+      phone || '',
       email,
-      'SciTemper — Verify Your Account',
-      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
-        <h2 style="color:#00e5c3;">SciTemper</h2>
-        <p>Your registration OTP is:</p>
-        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
-        <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes. Do not share it with anyone.</p>
-      </div>`
+      otp,
+      'Verify Your Account'
     );
+    regChannel = result.channel;
   } catch (e) {
-    console.error('Email send error:', e.message);
+    console.error('OTP send error:', e.message);
   }
 
-  ok(res, 'Registration initiated. OTP sent to your email.', {
+  ok(res, `Registration initiated. OTP sent via ${regChannel}.`, {
     email: email.toLowerCase(),
+    channel: regChannel,
     note: 'OTP expires in 5 minutes.',
   });
 });
@@ -308,24 +360,23 @@ app.post('/login', async (req, res) => {
   clearLoginAttempts(user.email);
   const otp = storeOTP(user.email, 'login');
 
-  // Send OTP via email
+  // Send OTP: SMS first, email fallback
+  let loginChannel = 'email';
   try {
-    await sendEmail(
+    const result = await sendOTP(
+      user.phone || '',
       user.email,
-      'SciTemper — Login OTP',
-      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
-        <h2 style="color:#00e5c3;">SciTemper</h2>
-        <p>Your login OTP is:</p>
-        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
-        <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes. Do not share it with anyone.</p>
-      </div>`
+      otp,
+      'Login OTP'
     );
+    loginChannel = result.channel;
   } catch (e) {
-    console.error('Email send error:', e.message);
+    console.error('OTP send error:', e.message);
   }
 
-  ok(res, 'Credentials verified. OTP sent to your registered email.', {
+  ok(res, `Credentials verified. OTP sent via ${loginChannel}.`, {
     email: user.email,
+    channel: loginChannel,
     note:  'OTP expires in 5 minutes.',
   });
 });
@@ -395,24 +446,29 @@ app.post('/resend-otp', async (req, res) => {
 
   const otp = storeOTP(normalEmail, type);
 
-  // Send via email
-  try {
-    await sendEmail(
-      normalEmail,
-      'SciTemper — New OTP',
-      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
-        <h2 style="color:#00e5c3;">SciTemper</h2>
-        <p>Your new OTP is:</p>
-        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
-        <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes.</p>
-      </div>`
-    );
-  } catch (e) {
-    console.error('Email send error:', e.message);
+  // Send OTP: SMS first, email fallback
+  // Retrieve phone for confirmed users (login resend); pending users may have phone too
+  let resendPhone = '';
+  if (type === 'login') {
+    try {
+      const resendUser = await User.findOne({ email: normalEmail });
+      resendPhone = resendUser?.phone || '';
+    } catch (_) {}
+  } else if (pendingUsers[normalEmail]) {
+    resendPhone = pendingUsers[normalEmail].phone || '';
   }
 
-  ok(res, 'A new OTP has been sent to your email.', {
+  let resendChannel = 'email';
+  try {
+    const result = await sendOTP(resendPhone, normalEmail, otp, 'New OTP');
+    resendChannel = result.channel;
+  } catch (e) {
+    console.error('OTP send error:', e.message);
+  }
+
+  ok(res, `A new OTP has been sent via ${resendChannel}.`, {
     email: normalEmail,
+    channel: resendChannel,
     note:  'New OTP expires in 5 minutes.',
   });
 });
