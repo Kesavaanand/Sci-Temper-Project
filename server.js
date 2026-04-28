@@ -562,43 +562,151 @@ app.post('/check-email', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE — POST /send-assessment-link  (contact page → send link to user email)
+//  ROUTE — POST /forgot-password  (step 1: send reset OTP to email)
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || !isValidEmail(email))
+    return err(res, 'A valid email address is required.');
+
+  const normalEmail = email.toLowerCase();
+
+  let user;
+  try {
+    user = await User.findOne({ email: normalEmail });
+  } catch {
+    return err(res, 'Server error.', 500);
+  }
+
+  // Always respond with success to prevent email enumeration attacks
+  if (!user) {
+    return ok(res, 'If that email is registered, a reset code has been sent.');
+  }
+
+  const otp = storeOTP(normalEmail, 'reset');
+
+  try {
+    await sendEmail(
+      normalEmail,
+      'SciTemper — Password Reset Code',
+      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
+        <h2 style="color:#00e5c3;">SciTemper</h2>
+        <p>Hello <strong>${user.username}</strong>,</p>
+        <p>You requested a password reset. Your one-time reset code is:</p>
+        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
+        <p style="color:#6a8891;font-size:0.8rem;">This code expires in 5 minutes. If you did not request a reset, please ignore this email.</p>
+        <p style="color:#6a8891;font-size:0.8rem;">— The SciTemper Team</p>
+      </div>`
+    );
+    console.log(`[Password Reset OTP sent] To: ${normalEmail}`);
+  } catch (e) {
+    console.error('Reset OTP send error:', e.message);
+    return err(res, 'Failed to send reset code. Please try again later.', 500);
+  }
+
+  ok(res, 'If that email is registered, a reset code has been sent.');
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ROUTE — POST /verify-reset-otp  (step 2: confirm OTP before allowing reset)
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/verify-reset-otp', async (req, res) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp)
+    return err(res, 'Email and OTP are required.');
+
+  const normalEmail = email.toLowerCase();
+  const result = validateOTP(normalEmail, otp, 'reset');
+
+  if (!result.valid)
+    return err(res, result.reason || 'Invalid or expired reset code.', 401);
+
+  // Mark OTP as verified but keep it in store so /reset-password can confirm
+  // We tag it as verified to prevent reuse without completing the flow
+  otpStore[normalEmail].verified = true;
+
+  ok(res, 'Reset code verified. You may now set a new password.');
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ROUTE — POST /reset-password  (step 3: set the new password)
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/reset-password', async (req, res) => {
+  const { email, newPassword } = req.body;
+
+  if (!email || !newPassword)
+    return err(res, 'Email and new password are required.');
+
+  if (newPassword.length < 6)
+    return err(res, 'Password must be at least 6 characters long.');
+
+  const normalEmail = email.toLowerCase();
+
+  // Ensure OTP was verified in this session
+  const entry = otpStore[normalEmail];
+  if (!entry || entry.type !== 'reset' || !entry.verified)
+    return err(res, 'Reset session expired or invalid. Please start over.', 401);
+
+  if (Date.now() > entry.expires)
+    return err(res, 'Reset session has expired. Please request a new code.', 401);
+
+  let passwordHash;
+  try {
+    passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  } catch {
+    return err(res, 'Server error while hashing password.', 500);
+  }
+
+  try {
+    const updated = await User.findOneAndUpdate(
+      { email: normalEmail },
+      { passwordHash },
+      { new: true }
+    );
+    if (!updated)
+      return err(res, 'No account found with this email address.', 404);
+  } catch {
+    return err(res, 'Server error while updating password.', 500);
+  }
+
+  clearOTP(normalEmail);
+  console.log(`[Password Reset] Completed for: ${normalEmail}`);
+
+  ok(res, 'Password reset successfully! You can now log in with your new password.');
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ROUTE — POST /send-assessment-link  (contact page → send link to any email)
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/send-assessment-link', async (req, res) => {
   const { email } = req.body;
   if (!email || !isValidEmail(email))
     return err(res, 'A valid email is required.');
 
-  // Find user by email
-  let user;
-  try {
-    user = await User.findOne({ email: email.toLowerCase() });
-  } catch {
-    return err(res, 'Server error.', 500);
-  }
-
-  if (!user)
-    return err(res, 'No account found with this email address. Please sign up first.');
-
   const siteUrl = process.env.SITE_URL || 'https://scitemper.onrender.com';
   const assessmentLink = `${siteUrl}/quiz.html`;
 
   try {
     await sendEmail(
-      user.email,
+      email,
       'Your SciTemper Assessment Link 🔬',
       `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
         <h2 style="color:#00e5c3;">SciTemper</h2>
-        <p>Hello <strong>${user.username}</strong>,</p>
-        <p>Here is your personalised assessment link:</p>
+        <p>Hello,</p>
+        <p>Someone shared the SciTemper Scientific Temper Assessment with you!</p>
         <div style="padding:1rem;border:1px solid #243034;text-align:center;margin:1rem 0;">
           <a href="${assessmentLink}" style="color:#00e5c3;font-size:1rem;">${assessmentLink}</a>
         </div>
-        <p>Measure your scientific temper across 12 dimensions and start your learning journey.</p>
+        <p>Measure your scientific temper across multiple dimensions and start your learning journey.</p>
         <p style="color:#6a8891;font-size:0.8rem;">— The SciTemper Team</p>
       </div>`
     );
-    ok(res, 'Assessment link sent to your registered email!');
+    ok(res, 'Assessment link sent successfully!');
   } catch (e) {
     console.error('Email send error:', e.message);
     err(res, 'Failed to send email. Please try again later.', 500);

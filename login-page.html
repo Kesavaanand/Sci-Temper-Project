@@ -325,6 +325,53 @@
             from { opacity: 0; transform: translateY(20px); }
             to   { opacity: 1; transform: translateY(0); }
         }
+
+        /* ── Forgot Password link ──────────────────── */
+        .forgot-link {
+            display: block;
+            text-align: right;
+            font-size: 0.68rem;
+            color: #6a8891;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-top: -0.6rem;
+            margin-bottom: 1.2rem;
+            text-decoration: none;
+            cursor: pointer;
+            transition: color 0.2s;
+            background: none;
+            border: none;
+            font-family: 'Space Mono', monospace;
+            width: 100%;
+            padding: 0;
+            height: auto;
+        }
+        .forgot-link:hover { color: #00e5c3; background: none; transform: none; box-shadow: none; }
+
+        /* ── Password strength meter ───────────────── */
+        .strength-bar {
+            display: flex;
+            gap: 4px;
+            margin-top: 0.5rem;
+        }
+        .strength-seg {
+            flex: 1;
+            height: 3px;
+            background: #243034;
+            transition: background 0.3s;
+        }
+        .strength-label {
+            font-size: 0.62rem;
+            color: #6a8891;
+            margin-top: 0.3rem;
+            text-align: right;
+            letter-spacing: 0.08em;
+        }
+
+        /* Forgot sections hidden by default */
+        #fp-email-section,
+        #fp-otp-section,
+        #fp-newpass-section { display: none; }
     </style>
 </head>
 <body>
@@ -364,6 +411,8 @@
 
                 <button class="auth-btn" id="login-btn" onclick="handleLogin()">Login →</button>
 
+                <button class="forgot-link" onclick="showForgotPassword()">Forgot password?</button>
+
                 <div class="auth-divider"><span>or</span></div>
 
                 <div class="auth-footer">
@@ -371,7 +420,7 @@
                 </div>
             </div>
 
-            <!-- ── STEP 2: OTP ──────────────────────────── -->
+            <!-- ── STEP 2: Login OTP ────────────────────── -->
             <div id="otp-section">
                 <div class="otp-hint">
                     An OTP has been sent to your phone and email (<strong id="otp-email-display"></strong>).
@@ -390,23 +439,103 @@
                 </div>
             </div>
 
+            <!-- ── FORGOT PASSWORD A: Enter Email ──────── -->
+            <div id="fp-email-section">
+                <div class="otp-hint">
+                    Enter your <strong>registered email address</strong>. We'll send a one-time reset code instantly.
+                </div>
+                <div class="field-group">
+                    <label for="fp-email">Registered Email</label>
+                    <input type="email" id="fp-email" placeholder="you@example.com" autocomplete="email">
+                </div>
+                <button class="auth-btn" id="fp-send-btn" onclick="handleForgotSend()">Send Reset Code →</button>
+                <div style="text-align:center; margin-top:1.5rem;">
+                    <button class="back-link" onclick="resetToStep1()">← Back to login</button>
+                </div>
+            </div>
+
+            <!-- ── FORGOT PASSWORD B: Verify OTP ──────── -->
+            <div id="fp-otp-section">
+                <div class="otp-hint">
+                    A 6-digit reset code was sent to <strong id="fp-otp-email-display"></strong>. Enter it below.
+                </div>
+                <div class="field-group">
+                    <label for="fp-otp-input">Reset Code</label>
+                    <input type="text" id="fp-otp-input" placeholder="000000" maxlength="6" autocomplete="one-time-code">
+                </div>
+                <button class="auth-btn" id="fp-verify-btn" onclick="handleForgotVerify()">Verify Code →</button>
+                <div style="text-align:center; margin-top:1.5rem;">
+                    <button class="back-link" onclick="showForgotPassword()">← Re-enter email</button>
+                </div>
+            </div>
+
+            <!-- ── FORGOT PASSWORD C: New Password ─────── -->
+            <div id="fp-newpass-section">
+                <div class="otp-hint">
+                    Code verified ✓ Choose a new password for <strong id="fp-newpass-email-display"></strong>.
+                </div>
+                <div class="field-group">
+                    <label for="fp-newpass">New Password</label>
+                    <input type="password" id="fp-newpass" placeholder="Min. 6 characters" autocomplete="new-password" oninput="checkStrength(this.value)">
+                    <div class="strength-bar">
+                        <div class="strength-seg" id="str-1"></div>
+                        <div class="strength-seg" id="str-2"></div>
+                        <div class="strength-seg" id="str-3"></div>
+                        <div class="strength-seg" id="str-4"></div>
+                    </div>
+                    <div class="strength-label" id="str-label"></div>
+                </div>
+                <div class="field-group">
+                    <label for="fp-confirm">Confirm New Password</label>
+                    <input type="password" id="fp-confirm" placeholder="Repeat new password" autocomplete="new-password">
+                </div>
+                <button class="auth-btn" id="fp-reset-btn" onclick="handleForgotReset()">Reset Password →</button>
+                <div style="text-align:center; margin-top:1.5rem;">
+                    <button class="back-link" onclick="resetToStep1()">← Back to login</button>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <script>
         var BACKEND_URL = '';
         var userEmail = '';
+        var fpEmail = '';   // email used during forgot-password flow
 
+        // ── Helpers ──────────────────────────────────────
+        function hideAllSections() {
+            ['credentials-section','otp-section',
+             'fp-email-section','fp-otp-section','fp-newpass-section']
+            .forEach(function(id) { document.getElementById(id).style.display = 'none'; });
+        }
+
+        function setDots(active) {   // active: 1 or 2
+            document.getElementById('dot-1').classList.toggle('active', active === 1);
+            document.getElementById('dot-2').classList.toggle('active', active === 2);
+        }
+
+        function showMsg(text, type) {
+            var el = document.getElementById('msg');
+            el.textContent = text;
+            el.className = 'auth-msg ' + type;
+        }
+
+        function clearMsg() {
+            var el = document.getElementById('msg');
+            el.className = 'auth-msg';
+            el.textContent = '';
+        }
+
+        // ── LOGIN: Step 1 — credentials ──────────────────
         function handleLogin() {
             var username = document.getElementById('Username').value.trim();
             var password = document.getElementById('Password').value.trim();
             clearMsg();
-
             if (!username || !password) { showMsg('Please fill in both fields.', 'error'); return; }
 
             var btn = document.getElementById('login-btn');
-            btn.disabled = true;
-            btn.textContent = 'Checking...';
+            btn.disabled = true; btn.textContent = 'Checking…';
 
             fetch(BACKEND_URL + '/login', {
                 method: 'POST',
@@ -415,9 +544,7 @@
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                btn.disabled = false;
-                btn.textContent = 'Login →';
-
+                btn.disabled = false; btn.textContent = 'Login →';
                 if (data.success) {
                     userEmail = data.data.email;
                     document.getElementById('otp-email-display').textContent = userEmail;
@@ -428,12 +555,12 @@
                 }
             })
             .catch(function() {
-                btn.disabled = false;
-                btn.textContent = 'Login →';
+                btn.disabled = false; btn.textContent = 'Login →';
                 showMsg('Cannot connect to server. Is the backend running?', 'error');
             });
         }
 
+        // ── LOGIN: Step 2 — verify OTP ───────────────────
         function verifyOTP() {
             var otp = document.getElementById('otp-input').value.trim();
             clearMsg();
@@ -459,39 +586,166 @@
         }
 
         function goToStep2() {
-            document.getElementById('credentials-section').style.display = 'none';
+            hideAllSections();
             document.getElementById('otp-section').style.display = 'block';
-            document.getElementById('dot-1').classList.remove('active');
-            document.getElementById('dot-2').classList.add('active');
+            setDots(2);
             document.getElementById('step-label').textContent = 'Step 2 of 2';
             document.getElementById('auth-title').innerHTML = 'Verify <span>OTP.</span>';
         }
 
         function resetToStep1() {
+            hideAllSections();
             document.getElementById('credentials-section').style.display = 'block';
-            document.getElementById('otp-section').style.display = 'none';
-            document.getElementById('dot-1').classList.add('active');
-            document.getElementById('dot-2').classList.remove('active');
+            setDots(1);
             document.getElementById('step-label').textContent = 'Step 1 of 2';
             document.getElementById('auth-title').innerHTML = 'Welcome <span>back.</span>';
             clearMsg();
         }
 
-        function showMsg(text, type) {
-            var el = document.getElementById('msg');
-            el.textContent = text;
-            el.className = 'auth-msg ' + type;
+        // ── FORGOT PASSWORD: Step A — enter email ────────
+        function showForgotPassword() {
+            hideAllSections();
+            document.getElementById('fp-email-section').style.display = 'block';
+            setDots(1);
+            document.getElementById('step-label').textContent = 'Reset · Step 1 of 3';
+            document.getElementById('auth-title').innerHTML = 'Reset <span>Password.</span>';
+            clearMsg();
         }
 
-        function clearMsg() {
-            var el = document.getElementById('msg');
-            el.className = 'auth-msg';
-            el.textContent = '';
+        function handleForgotSend() {
+            var email = document.getElementById('fp-email').value.trim();
+            clearMsg();
+            if (!email) { showMsg('Please enter your email address.', 'error'); return; }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showMsg('Please enter a valid email address.', 'error'); return; }
+
+            var btn = document.getElementById('fp-send-btn');
+            btn.disabled = true; btn.textContent = 'Sending…';
+
+            fetch(BACKEND_URL + '/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; btn.textContent = 'Send Reset Code →';
+                if (data.success) {
+                    fpEmail = email.toLowerCase();
+                    document.getElementById('fp-otp-email-display').textContent = fpEmail;
+                    showMsg('Reset code sent! Check your inbox.', 'info');
+                    // Move to OTP step
+                    hideAllSections();
+                    document.getElementById('fp-otp-section').style.display = 'block';
+                    setDots(2);
+                    document.getElementById('step-label').textContent = 'Reset · Step 2 of 3';
+                    document.getElementById('auth-title').innerHTML = 'Verify <span>Code.</span>';
+                } else {
+                    showMsg(data.message || 'Could not send reset code.', 'error');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false; btn.textContent = 'Send Reset Code →';
+                showMsg('Cannot connect to server.', 'error');
+            });
         }
 
+        // ── FORGOT PASSWORD: Step B — verify OTP ─────────
+        function handleForgotVerify() {
+            var otp = document.getElementById('fp-otp-input').value.trim();
+            clearMsg();
+            if (!otp || otp.length < 6) { showMsg('Please enter the 6-digit reset code.', 'error'); return; }
+
+            var btn = document.getElementById('fp-verify-btn');
+            btn.disabled = true; btn.textContent = 'Verifying…';
+
+            fetch(BACKEND_URL + '/verify-reset-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: fpEmail, otp })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; btn.textContent = 'Verify Code →';
+                if (data.success) {
+                    document.getElementById('fp-newpass-email-display').textContent = fpEmail;
+                    showMsg('Code verified! Now choose your new password.', 'success');
+                    hideAllSections();
+                    document.getElementById('fp-newpass-section').style.display = 'block';
+                    setDots(2);
+                    document.getElementById('step-label').textContent = 'Reset · Step 3 of 3';
+                    document.getElementById('auth-title').innerHTML = 'New <span>Password.</span>';
+                } else {
+                    showMsg(data.message || 'Invalid or expired code.', 'error');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false; btn.textContent = 'Verify Code →';
+                showMsg('Cannot connect to server.', 'error');
+            });
+        }
+
+        // ── FORGOT PASSWORD: Step C — set new password ───
+        function handleForgotReset() {
+            var newpass  = document.getElementById('fp-newpass').value;
+            var confirm  = document.getElementById('fp-confirm').value;
+            clearMsg();
+
+            if (!newpass || newpass.length < 6) { showMsg('Password must be at least 6 characters.', 'error'); return; }
+            if (newpass !== confirm)             { showMsg('Passwords do not match.', 'error'); return; }
+
+            var btn = document.getElementById('fp-reset-btn');
+            btn.disabled = true; btn.textContent = 'Resetting…';
+
+            fetch(BACKEND_URL + '/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: fpEmail, newPassword: newpass })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; btn.textContent = 'Reset Password →';
+                if (data.success) {
+                    showMsg('Password reset successful! Redirecting to login…', 'success');
+                    setTimeout(function() { resetToStep1(); }, 2000);
+                } else {
+                    showMsg(data.message || 'Password reset failed.', 'error');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false; btn.textContent = 'Reset Password →';
+                showMsg('Cannot connect to server.', 'error');
+            });
+        }
+
+        // ── Password strength meter ───────────────────────
+        function checkStrength(val) {
+            var score = 0;
+            if (val.length >= 6)  score++;
+            if (val.length >= 10) score++;
+            if (/[A-Z]/.test(val) && /[a-z]/.test(val)) score++;
+            if (/[^A-Za-z0-9]/.test(val) || /[0-9]/.test(val)) score++;
+
+            var colors = ['#e05a7a','#e09a5a','#f7c35f','#00e5c3'];
+            var labels = ['Weak','Fair','Good','Strong'];
+            for (var i = 1; i <= 4; i++) {
+                var seg = document.getElementById('str-' + i);
+                seg.style.background = i <= score ? colors[score - 1] : '#243034';
+            }
+            document.getElementById('str-label').textContent = score > 0 ? labels[score - 1] : '';
+        }
+
+        // ── Keyboard shortcuts ────────────────────────────
         document.addEventListener('keydown', function(e) {
             if (e.key !== 'Enter') return;
-            if (document.getElementById('otp-section').style.display === 'block') verifyOTP();
+            var otpSec   = document.getElementById('otp-section');
+            var fpOtpSec = document.getElementById('fp-otp-section');
+            var fpNewSec = document.getElementById('fp-newpass-section');
+            var fpEmailS = document.getElementById('fp-email-section');
+
+            if (otpSec.style.display   === 'block') verifyOTP();
+            else if (fpOtpSec.style.display === 'block') handleForgotVerify();
+            else if (fpNewSec.style.display === 'block') handleForgotReset();
+            else if (fpEmailS.style.display === 'block') handleForgotSend();
             else handleLogin();
         });
     </script>
