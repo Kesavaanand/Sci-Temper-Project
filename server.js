@@ -45,44 +45,65 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
 }
 
 /**
- * sendOTP — tries SMS via Twilio Verify first; falls back to email.
- * When SMS succeeds, Twilio generates the code and sends it to the phone number.
- * When SMS fails (no phone / Twilio error), our locally generated OTP goes by email.
+ * sendOTP — sends OTP via BOTH SMS (Twilio Verify) AND email simultaneously.
+ *
+ * IMPORTANT — Two separate codes are in play:
+ *   • SMS  : Twilio Verify generates its OWN code and sends it to the phone.
+ *            Verify via twilioClient.verify.v2.services(...).verificationChecks
+ *   • Email: Our locally generated `otp` from otpStore is sent here.
+ *            Verify via validateOTP() / otpStore.
+ *
+ * The user can use EITHER code to authenticate. Both channels fire in parallel.
  *
  * @param {string} phone  — E.164 number e.g. "+919876543210" (may be empty string)
- * @param {string} email  — user email (fallback destination)
- * @param {string} otp    — locally generated OTP (used only for the email fallback)
+ * @param {string} email  — user email address
+ * @param {string} otp    — locally generated OTP (sent via email)
  * @param {string} label  — display label e.g. 'Verify Your Account' or 'Login OTP'
- * @returns {{ channel: 'sms'|'email' }}
+ * @returns {{ channels: string[] }}  — list of channels that succeeded
  */
 async function sendOTP(phone, email, otp, label = 'OTP') {
-  // ── Try SMS first
+  const channels = [];
+  const errors   = [];
+
+  // ── Fire SMS via Twilio Verify (Twilio generates its own code)
   if (phone && twilioClient) {
     try {
       await twilioClient.verify.v2
         .services(TWILIO_SERVICE_SID)
         .verifications
         .create({ to: phone, channel: 'sms' });
+      channels.push('sms');
       console.log(`[SMS OTP sent] To: ${phone}`);
-      return { channel: 'sms' };
     } catch (smsErr) {
-      console.warn(`[SMS failed, falling back to email] ${smsErr.message}`);
+      errors.push(`SMS: ${smsErr.message}`);
+      console.warn(`[SMS failed] ${smsErr.message}`);
     }
   }
 
-  // ── Fallback: email
-  await sendEmail(
-    email,
-    `SciTemper — ${label}`,
-    `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
-      <h2 style="color:#00e5c3;">SciTemper</h2>
-      <p>Your OTP is:</p>
-      <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
-      <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes. Do not share it with anyone.</p>
-    </div>`
-  );
-  console.log(`[Email OTP sent] To: ${email}`);
-  return { channel: 'email' };
+  // ── Always send email as well (carries our local OTP from otpStore)
+  try {
+    await sendEmail(
+      email,
+      `SciTemper — ${label}`,
+      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
+        <h2 style="color:#00e5c3;">SciTemper</h2>
+        <p>Your OTP is:</p>
+        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
+        <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes. Do not share it with anyone.</p>
+      </div>`
+    );
+    channels.push('email');
+    console.log(`[Email OTP sent] To: ${email}`);
+  } catch (emailErr) {
+    errors.push(`Email: ${emailErr.message}`);
+    console.warn(`[Email failed] ${emailErr.message}`);
+  }
+
+  if (channels.length === 0) {
+    throw new Error(`All OTP channels failed: ${errors.join(' | ')}`);
+  }
+
+  return { channels };
 }
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
@@ -242,8 +263,8 @@ app.post('/register', async (req, res) => {
   // ── Generate and store OTP
   const otp = storeOTP(email.toLowerCase(), 'register');
 
-  // ── Send OTP: SMS first, email fallback
-  let regChannel = 'email';
+  // ── Send OTP via both SMS and email
+  let regChannels = ['email'];
   try {
     const result = await sendOTP(
       phone || '',
@@ -251,15 +272,15 @@ app.post('/register', async (req, res) => {
       otp,
       'Verify Your Account'
     );
-    regChannel = result.channel;
+    regChannels = result.channels;
   } catch (e) {
     console.error('OTP send error:', e.message);
   }
 
-  ok(res, `Registration initiated. OTP sent via ${regChannel}.`, {
+  ok(res, `Registration initiated. OTP sent via ${regChannels.join(' and ')}.`, {
     email: email.toLowerCase(),
-    channel: regChannel,
-    note: 'OTP expires in 5 minutes.',
+    channels: regChannels,
+    note: 'OTP expires in 5 minutes. Use the OTP from SMS or email.',
   });
 });
 
@@ -274,15 +295,32 @@ app.post('/verify-otp', async (req, res) => {
     return err(res, 'Email and OTP are required.');
 
   const normalEmail = email.toLowerCase();
-  const result = validateOTP(normalEmail, otp, 'register');
-
-  if (!result.valid)
-    return err(res, result.reason);
 
   // ── OTP valid → move from pending to confirmed users
   const pending = pendingUsers[normalEmail];
   if (!pending)
     return err(res, 'No pending registration found. Please register again.');
+
+  // ── Check local OTP (email channel) first
+  const localResult = validateOTP(normalEmail, otp, 'register');
+
+  // ── If local fails AND user has a phone, also check Twilio (SMS channel)
+  let verified = localResult.valid;
+  if (!verified && pending.phone && twilioClient) {
+    try {
+      const check = await twilioClient.verify.v2
+        .services(TWILIO_SERVICE_SID)
+        .verificationChecks
+        .create({ to: pending.phone, code: String(otp) });
+      verified = (check.status === 'approved');
+      if (verified) console.log(`[Twilio SMS OTP verified] For: ${normalEmail}`);
+    } catch (twilioErr) {
+      console.warn(`[Twilio check failed] ${twilioErr.message}`);
+    }
+  }
+
+  if (!verified)
+    return err(res, localResult.reason || 'Incorrect OTP.');
 
   try {
     await User.create({
@@ -360,8 +398,8 @@ app.post('/login', async (req, res) => {
   clearLoginAttempts(user.email);
   const otp = storeOTP(user.email, 'login');
 
-  // Send OTP: SMS first, email fallback
-  let loginChannel = 'email';
+  // Send OTP via both SMS and email
+  let loginChannels = ['email'];
   try {
     const result = await sendOTP(
       user.phone || '',
@@ -369,15 +407,15 @@ app.post('/login', async (req, res) => {
       otp,
       'Login OTP'
     );
-    loginChannel = result.channel;
+    loginChannels = result.channels;
   } catch (e) {
     console.error('OTP send error:', e.message);
   }
 
-  ok(res, `Credentials verified. OTP sent via ${loginChannel}.`, {
+  ok(res, `Credentials verified. OTP sent via ${loginChannels.join(' and ')}.`, {
     email: user.email,
-    channel: loginChannel,
-    note:  'OTP expires in 5 minutes.',
+    channels: loginChannels,
+    note:  'OTP expires in 5 minutes. Use the OTP from SMS or email.',
   });
 });
 
@@ -392,14 +430,8 @@ app.post('/verify-login-otp', async (req, res) => {
     return err(res, 'Email and OTP are required.');
 
   const normalEmail = email.toLowerCase();
-  const result = validateOTP(normalEmail, otp, 'login');
 
-  if (!result.valid)
-    return err(res, result.reason, 401);
-
-  // ── OTP valid
-  clearOTP(normalEmail);
-
+  // ── Find user first so we have their phone for Twilio check
   let user;
   try {
     user = await User.findOne({ email: normalEmail });
@@ -409,6 +441,30 @@ app.post('/verify-login-otp', async (req, res) => {
 
   if (!user)
     return err(res, 'User not found.', 404);
+
+  // ── Check local OTP (email channel) first
+  const localResult = validateOTP(normalEmail, otp, 'login');
+
+  // ── If local fails AND user has a phone, also check Twilio (SMS channel)
+  let verified = localResult.valid;
+  if (!verified && user.phone && twilioClient) {
+    try {
+      const check = await twilioClient.verify.v2
+        .services(TWILIO_SERVICE_SID)
+        .verificationChecks
+        .create({ to: user.phone, code: String(otp) });
+      verified = (check.status === 'approved');
+      if (verified) console.log(`[Twilio SMS OTP verified] For: ${normalEmail}`);
+    } catch (twilioErr) {
+      console.warn(`[Twilio check failed] ${twilioErr.message}`);
+    }
+  }
+
+  if (!verified)
+    return err(res, localResult.reason || 'Incorrect OTP.', 401);
+
+  // ── OTP valid
+  clearOTP(normalEmail);
 
   ok(res, 'Login successful! Welcome back.', {
     username: user.username,
@@ -458,18 +514,18 @@ app.post('/resend-otp', async (req, res) => {
     resendPhone = pendingUsers[normalEmail].phone || '';
   }
 
-  let resendChannel = 'email';
+  let resendChannels = ['email'];
   try {
     const result = await sendOTP(resendPhone, normalEmail, otp, 'New OTP');
-    resendChannel = result.channel;
+    resendChannels = result.channels;
   } catch (e) {
     console.error('OTP send error:', e.message);
   }
 
-  ok(res, `A new OTP has been sent via ${resendChannel}.`, {
+  ok(res, `A new OTP has been sent via ${resendChannels.join(' and ')}.`, {
     email: normalEmail,
-    channel: resendChannel,
-    note:  'New OTP expires in 5 minutes.',
+    channels: resendChannels,
+    note:  'New OTP expires in 5 minutes. Use the OTP from SMS or email.',
   });
 });
 

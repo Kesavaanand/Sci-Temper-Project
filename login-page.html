@@ -374,7 +374,7 @@
             <!-- ── STEP 2: OTP ──────────────────────────── -->
             <div id="otp-section">
                 <div class="otp-hint">
-                    An OTP has been sent to <strong id="otp-email-display"></strong>.
+                    An OTP has been sent to your phone and email (<strong id="otp-email-display"></strong>).
                     Enter it below to complete login.
                 </div>
 
@@ -421,7 +421,7 @@
                 if (data.success) {
                     userEmail = data.data.email;
                     document.getElementById('otp-email-display').textContent = userEmail;
-                    showMsg('OTP sent to your registered email. Please check your inbox.', 'info');
+                    showMsg('OTP sent to your phone (SMS) and email. Use whichever arrives first.', 'info');
                     goToStep2();
                 } else {
                     showMsg(data.message || 'Login failed.', 'error');
