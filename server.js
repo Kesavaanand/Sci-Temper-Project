@@ -18,10 +18,12 @@ const PORT = process.env.PORT || 3000;
 // ─── Email Transporter (Nodemailer) ───────────────────────────────────────────
 // Set SMTP_USER and SMTP_PASS in Render environment variables
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: false,
   auth: {
     user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,  // Use Gmail App Password
+    pass: process.env.SMTP_PASS,
   },
 });
 
