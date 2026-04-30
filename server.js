@@ -15,27 +15,29 @@ const twilio     = require('twilio');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// ─── Email via Resend API ─────────────────────────────────────────────────────
+// ─── Email via SendGrid API ───────────────────────────────────────────────────
 async function sendEmail(to, subject, html) {
-  if (!process.env.RESEND_API_KEY) {
-    console.log('[EMAIL SKIPPED — no RESEND_API_KEY] To:', to, '| Subject:', subject);
+  if (!process.env.SENDGRID_API_KEY) {
+    console.log('[EMAIL SKIPPED — no SENDGRID_API_KEY] To:', to, '| Subject:', subject);
     return;
   }
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'SciTemper <onboarding@resend.dev>',
-      to: [to],
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: 'kesavaanand2257@gmail.com', name: 'SciTemper' },
       subject,
-      html,
+      content: [{ type: 'text/html', value: html }],
     }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'Resend API error');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data.errors && data.errors[0].message) || 'SendGrid API error');
+  }
 }
 
 // ─── Twilio Verify Client ─────────────────────────────────────────────────────
