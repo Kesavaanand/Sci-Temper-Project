@@ -19,8 +19,8 @@ const PORT = process.env.PORT || 3000;
 // Set SMTP_USER and SMTP_PASS in Render environment variables
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: false,
+  port: parseInt(process.env.SMTP_PORT) || 465,
+  secure: true,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -768,4 +768,3 @@ app.listen(PORT, () => {
   console.log(`    GET  /users             — List users (dev only)`);
   console.log(`\n  Database: ${process.env.MONGODB_URI}\n`);
 });
- 
