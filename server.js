@@ -92,11 +92,14 @@ async function sendOTP(phone, email, otp, label = 'OTP') {
     await sendEmail(
       email,
       `SciTemper — ${label}`,
-      `<div style="font-family:monospace;background:#0a0e0f;color:#e8f0f2;padding:2rem;max-width:500px;">
-        <h2 style="color:#00e5c3;">SciTemper</h2>
-        <p>Your OTP is:</p>
-        <div style="font-size:2rem;letter-spacing:0.5em;color:#00e5c3;padding:1rem;border:1px solid #243034;text-align:center;">${otp}</div>
-        <p style="color:#6a8891;font-size:0.8rem;">This OTP expires in 5 minutes. Do not share it with anyone.</p>
+      `<div style="font-family:Arial,sans-serif;background:#ffffff;color:#222222;padding:2rem;max-width:500px;border:1px solid #e0e0e0;">
+        <h2 style="color:#00b89c;">SciTemper</h2>
+        <p>Hello,</p>
+        <p>Your one-time password (OTP) for SciTemper is:</p>
+        <div style="font-size:2rem;letter-spacing:0.5em;color:#00b89c;padding:1rem;border:1px solid #e0e0e0;text-align:center;background:#f9f9f9;">${otp}</div>
+        <p>This OTP expires in 5 minutes. Do not share it with anyone.</p>
+        <p style="color:#888888;font-size:0.8rem;">If you did not request this, please ignore this email.</p>
+        <p style="color:#888888;font-size:0.8rem;">— The SciTemper Team</p>
       </div>`
     );
     channels.push('email');
