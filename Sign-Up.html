@@ -413,7 +413,7 @@
     </div>
 
     <script>
-        var BACKEND_URL = '';
+        var BACKEND_URL = 'https://scitemper.onrender.com';
         var registeredEmail = '';
 
         // ── Email domain validation (checks MX via backend) ──────────────────
@@ -499,7 +499,7 @@
             .catch(function() {
                 btn.disabled = false;
                 btn.textContent = 'Create Account →';
-                showMsg('Cannot connect to server. Is the backend running?', 'error');
+                showMsg('Cannot reach server. If this is your first visit, the server may be waking up — wait 30 seconds and try again.', 'error');
             });
         }
 
