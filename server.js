@@ -232,31 +232,97 @@ const chatHistories = new Map();
 const CHAT_MSG_LIMIT = 20;
 const chatMsgCount   = new Map();
 
-const SCITEMPER_SYSTEM_PROMPT = `You are SciBot, the friendly AI assistant for SciTemper — a scientific literacy platform that helps users measure and grow their scientific temper.
+const SCITEMPER_SYSTEM_PROMPT = `You are SciBot, the AI support assistant for SciTemper — a scientific literacy platform. You have TWO jobs:
 
-Your role:
-- Answer questions about the SciTemper platform, its pages, features, the quiz, scientific temper, and general science topics
-- Help users navigate the platform and understand what each section/page does
-- Give short, clear, encouraging replies (2-4 sentences max unless the question needs more detail)
-- Be warm, encouraging, and enthusiastic about science
+1. TROUBLESHOOT and SOLVE user problems step by step (most important)
+2. Answer questions about the platform and science topics
 
-Platform pages & features:
-- **Home (index.html)**: The main landing page. Shows what SciTemper measures, a radar chart of the 6 assessment dimensions, platform stats, and a contact/email sign-up section at the bottom.
-- **About (about.html)**: Information about SciTemper's mission, the team, and the science behind the platform.
-- **Login (login-page.html)**: Users log in with username + password, then verify with an OTP sent to their email. Two-step secure login.
-- **Sign Up (Sign-Up.html)**: Free registration — enter username, email, phone (optional), and password. An OTP is sent to verify the email before the account is activated.
-- **Quiz / Temper Scale (quiz.html)**: A 5-question sample assessment drawn from a 30-question bank. After completing it, the user's level is highlighted on the Scientific Temper Spectrum (Novice → Curious → Informed → Analytical → Scientific). Users must be logged in to access the full assessment.
-- **Explore Platform (explore.html)**: A deeper look at all platform features — full assessment, learning paths, progress tracking, and resources for educators and researchers.
-- **Contact**: Not a separate page — it's the section at the bottom of the Home page (scroll down or click "Contact" in the nav). Users can enter their email to receive the assessment link directly in their inbox. The email used is kesavaanand2257@gmail.com for platform correspondence.
-- **Temper Scale**: Visible on quiz.html — shows 5 levels: Novice, Curious, Informed, Analytical, Scientific. Users can click any level to read what it means.
+CRITICAL RULE — When a user reports a problem or says something "isn't working", "can't access", "unable to do" something:
+- Do NOT just describe what the feature does
+- Do NOT give generic info about the page
+- ACTUALLY DIAGNOSE the issue and give clear numbered steps to fix it
+- Ask follow-up questions if needed to narrow down the cause
 
-Assessment facts:
-- 6 dimensions assessed: Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, Misinformation Resistance
-- 5 Temper Levels: Novice → Curious → Informed → Analytical → Scientific
-- 30-question bank, 5 shown per session (randomised)
-- Article 51A(h) of the Indian Constitution calls for scientific temper in every citizen
+═══════════════════════════════════════
+TROUBLESHOOTING KNOWLEDGE BASE
+═══════════════════════════════════════
 
-If someone asks about something completely unrelated to science or the platform (e.g. cooking recipes, sports scores), gently let them know you're focused on SciTemper and science topics.`;
+PROBLEM: "Can't access quiz / unable to open quiz after login / quiz not working after login"
+ROOT CAUSE: The quiz page (quiz.html) checks sessionStorage for "isLoggedIn" = "true". If that flag is missing, the button redirects to login instead of the quiz. This happens when:
+  - The user logged in but sessionStorage wasn't set correctly
+  - The user opened quiz.html in a new tab (sessionStorage doesn't carry across tabs in some browsers)
+  - The browser blocked sessionStorage (private/incognito mode, some mobile browsers)
+  - The user's login OTP step was skipped or failed silently
+FIX STEPS to give the user:
+  1. Go to the Login page and log in again from scratch (don't skip the OTP step)
+  2. After OTP verification succeeds, immediately click "Take Free Assessment" from the Home page — do not open quiz.html in a new tab
+  3. If it still fails: try a different browser (Chrome works best)
+  4. If using incognito/private mode: switch to normal mode — sessionStorage is blocked in incognito on some browsers
+  5. If on mobile: try on a desktop browser
+  6. Clear browser cache and cookies, then log in again
+
+PROBLEM: "Not receiving OTP / OTP not coming to email"
+FIX STEPS:
+  1. Check your spam/junk folder
+  2. Wait up to 2 minutes — email delivery can be slow
+  3. Use the "Resend OTP" button on the OTP screen
+  4. Make sure you entered the correct email address during registration
+  5. Try registering with a Gmail address if using another provider
+
+PROBLEM: "Login not working / invalid credentials"
+FIX STEPS:
+  1. Make sure you're using your USERNAME (not email) in the username field
+  2. Check caps lock is off
+  3. If you forgot your password, click "Forgot Password" on the login page
+  4. After 3 failed attempts the account locks for 5 minutes — just wait and try again
+
+PROBLEM: "OTP expired"
+FIX STEPS:
+  1. OTPs expire in 5 minutes — click "Resend OTP" to get a new one
+  2. Complete the OTP step immediately after receiving it
+
+PROBLEM: "Registration not working / can't sign up"
+FIX STEPS:
+  1. Username must be at least 3 characters
+  2. Password must be at least 6 characters
+  3. Use a real email address — fake emails will fail OTP delivery
+  4. If "email already exists" error: that email is already registered, go to Login instead
+
+PROBLEM: "Page not loading / site not opening"
+FIX STEPS:
+  1. Wait 30–60 seconds — the server on Render free tier "sleeps" after inactivity and needs time to wake up
+  2. Refresh the page once after waiting
+  3. Check your internet connection
+
+PROBLEM: "Quiz answers not submitting / quiz frozen"
+FIX STEPS:
+  1. Refresh the page and log in again
+  2. Try a different browser
+  3. Disable any browser extensions (ad blockers can interfere)
+
+═══════════════════════════════════════
+PLATFORM PAGES & FEATURES
+═══════════════════════════════════════
+- Home (index.html): Landing page with platform overview, 6-dimension radar chart, stats, and Contact section at the bottom
+- About (about.html): SciTemper's mission and the science behind the platform
+- Login (login-page.html): Username + password, then OTP verification sent to email
+- Sign Up (Sign-Up.html): Free — username, email, optional phone, password → OTP email verification
+- Quiz / Temper Scale (quiz.html): 5-question sample from 30-question bank. Login required. Shows Temper Spectrum after completion
+- Explore Platform (explore.html): Full feature tour — complete assessment, learning paths, progress tracking, educator resources
+- Contact: Bottom section of the Home page — enter email to receive assessment link
+
+Assessment: 6 dimensions — Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, Misinformation Resistance
+5 Levels: Novice → Curious → Informed → Analytical → Scientific
+Article 51A(h) of the Indian Constitution calls for scientific temper in every citizen
+
+═══════════════════════════════════════
+RESPONSE STYLE
+═══════════════════════════════════════
+- When solving a problem: give clear numbered steps, be direct and specific
+- When answering info questions: keep it to 2-3 sentences
+- Always be warm and encouraging
+- If you need more info to diagnose: ask ONE specific question
+- Never just describe a feature when someone has a problem — solve it`;
 
 async function getAIReply(socketId, userMessage) {
   // Build conversation history
@@ -307,30 +373,71 @@ async function getAIReply(socketId, userMessage) {
 
   // ── Fallback: rule-based replies (works even without API key)
   const msg = userMessage.toLowerCase();
-  let reply = "I'm here to help with anything about SciTemper or scientific literacy! What would you like to know?";
+  let reply = "I'm here to help with anything about SciTemper! What's the issue you're facing?";
 
-  if (msg.includes('contact')) {
-    reply = "The Contact section is at the bottom of the Home page — just scroll down or click 'Contact' in the nav bar. Enter your email there and we'll send you the assessment link directly to your inbox! 📧";
-  } else if (msg.includes('explore') || msg.includes('explore platform')) {
-    reply = "The **Explore Platform** page (explore.html) gives you a full tour of SciTemper's features — including the complete assessment, personalised learning paths, progress tracking, and resources for educators. Click 'Explore Platform' on the home page to check it out! 🚀";
-  } else if (msg.includes('quiz') || msg.includes('assessment') || msg.includes('test')) {
-    reply = "Our sample quiz has 5 questions from a 30-question bank covering 6 dimensions of scientific thinking. Log in first, then hit 'Take Free Assessment' to get started! 🔬";
+  // ── Problem/issue detection first (highest priority) ──────────────────────
+  const hasProblem = msg.includes('unable') || msg.includes('can\'t') || msg.includes('cannot')
+    || msg.includes('not working') || msg.includes('issue') || msg.includes('problem')
+    || msg.includes('error') || msg.includes('fail') || msg.includes('doesn\'t work')
+    || msg.includes('not able') || msg.includes('stuck') || msg.includes('help me');
+
+  if ((hasProblem || msg.includes('access')) && (msg.includes('quiz') || msg.includes('assessment'))) {
+    reply = "Here's how to fix quiz access after login:\n\n"
+      + "1️⃣ Log out completely and log in again fresh\n"
+      + "2️⃣ Complete the OTP verification step fully — don't skip it\n"
+      + "3️⃣ After login, click **'Take Free Assessment'** from the Home page — don't open quiz.html directly in a new tab\n"
+      + "4️⃣ If still blocked: try Chrome browser in normal mode (not incognito)\n"
+      + "5️⃣ Clear your browser cache and cookies, then log in again\n\n"
+      + "The quiz checks your login session (sessionStorage) which can be lost if you open a new tab or use incognito mode. Let me know if any step is unclear! 🔬";
+  } else if (hasProblem && (msg.includes('otp') || msg.includes('code') || msg.includes('email'))) {
+    reply = "OTP not arriving? Try these steps:\n\n"
+      + "1️⃣ Check your **spam/junk folder** first\n"
+      + "2️⃣ Wait up to 2 minutes — email can be slow\n"
+      + "3️⃣ Click **'Resend OTP'** on the verification screen\n"
+      + "4️⃣ Make sure you used the correct email address\n"
+      + "5️⃣ Try registering with a Gmail address if using another provider";
+  } else if (hasProblem && (msg.includes('login') || msg.includes('log in') || msg.includes('sign in') || msg.includes('password') || msg.includes('credential'))) {
+    reply = "Login not working? Here's what to check:\n\n"
+      + "1️⃣ Use your **username** in the username field (not your email)\n"
+      + "2️⃣ Check **Caps Lock** is off\n"
+      + "3️⃣ After 3 failed attempts, the account locks for **5 minutes** — just wait\n"
+      + "4️⃣ Forgot password? Click **'Forgot Password'** on the login page to reset via OTP";
+  } else if (hasProblem && (msg.includes('register') || msg.includes('sign up') || msg.includes('account'))) {
+    reply = "Registration issue? Check these:\n\n"
+      + "1️⃣ Username must be **at least 3 characters**\n"
+      + "2️⃣ Password must be **at least 6 characters**\n"
+      + "3️⃣ Use a real email — fake emails won\'t receive the OTP\n"
+      + "4️⃣ 'Email already exists' error? That email is registered — go to Login instead";
+  } else if (hasProblem && (msg.includes('load') || msg.includes('open') || msg.includes('site') || msg.includes('page'))) {
+    reply = "Page not loading? Try this:\n\n"
+      + "1️⃣ **Wait 30–60 seconds** and refresh — the server sleeps when idle on Render free tier\n"
+      + "2️⃣ Check your internet connection\n"
+      + "3️⃣ Try a different browser (Chrome recommended)\n"
+      + "4️⃣ Disable browser extensions like ad blockers";
+
+  // ── Info questions (no problem detected) ─────────────────────────────────
+  } else if (msg.includes('contact')) {
+    reply = "The Contact section is at the **bottom of the Home page** — scroll down or click 'Contact' in the nav bar. Enter your email there and we'll send the assessment link to your inbox! 📧";
+  } else if (msg.includes('explore')) {
+    reply = "The **Explore Platform** page (explore.html) shows all SciTemper features — complete assessment, personalised learning paths, progress tracking, and educator resources. Click 'Explore Platform' on the home page! 🚀";
+  } else if (msg.includes('quiz') || msg.includes('assessment')) {
+    reply = "The quiz has 5 questions from a 30-question bank across 6 dimensions. Log in first, then click **'Take Free Assessment'** on the Home page. After finishing, your Temper Level is shown on the Spectrum below! 🔬";
   } else if (msg.includes('level') || msg.includes('temper scale') || msg.includes('spectrum') || msg.includes('score')) {
-    reply = "SciTemper has 5 levels: **Novice → Curious → Informed → Analytical → Scientific**. Each level reflects how deeply you reason from evidence. Complete the quiz to see where you land! 📊";
-  } else if (msg.includes('register') || msg.includes('sign up') || msg.includes('account') || msg.includes('create')) {
-    reply = "Creating an account is free! Click 'Login' in the nav bar and then choose Sign Up. Enter your username, email, and password — you'll get an OTP to verify your email before your account is activated. 🎉";
-  } else if (msg.includes('login') || msg.includes('log in') || msg.includes('password') || msg.includes('forgot')) {
-    reply = "Head to the Login page from the nav bar. Enter your credentials and verify with the OTP sent to your email. Forgot your password? Use the 'Forgot Password' link on the login page! 🔑";
+    reply = "SciTemper has 5 levels: **Novice → Curious → Informed → Analytical → Scientific**. Complete the quiz to see where you land on the Spectrum! 📊";
+  } else if (msg.includes('register') || msg.includes('sign up') || msg.includes('create account')) {
+    reply = "Registration is free! Click 'Login' in the nav → choose Sign Up → enter username, email, and password → verify with the OTP sent to your email. 🎉";
+  } else if (msg.includes('login') || msg.includes('log in') || msg.includes('forgot') || msg.includes('password')) {
+    reply = "Go to the Login page from the nav bar. Enter your **username** and password, then verify with the OTP sent to your email. Forgot your password? Use the 'Forgot Password' link! 🔑";
   } else if (msg.includes('about')) {
-    reply = "The About page covers SciTemper's mission — helping every Indian citizen develop scientific temper as called for by Article 51A(h) of the Constitution. Click 'About' in the nav bar to read more! 🇮🇳";
+    reply = "The About page covers SciTemper's mission — helping every Indian citizen fulfil Article 51A(h) of the Constitution by developing scientific temper. Click 'About' in the nav! 🇮🇳";
   } else if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
-    reply = "Hello! 👋 I'm SciBot, your guide on SciTemper. Ask me about any page on the platform, the quiz, your results, or scientific temper in general. What's on your mind?";
+    reply = "Hello! 👋 I'm SciBot. Tell me what issue you're facing or what you'd like to know about SciTemper — I'll help you fix it or find it!";
   } else if (msg.includes('scientific temper')) {
-    reply = "Scientific temper is the disposition to approach all claims with evidence, scepticism, and rational inquiry. Article 51A(h) of the Indian Constitution makes it a fundamental duty of every citizen! 🇮🇳";
-  } else if (msg.includes('dimension') || msg.includes('measure') || msg.includes('assess')) {
-    reply = "We assess 6 dimensions: Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, and Misinformation Resistance. Each gives you a unique slice of your scientific mind!";
-  } else if (msg.includes('page') || msg.includes('section') || msg.includes('navigate') || msg.includes('where')) {
-    reply = "SciTemper has these pages: **Home** (overview), **About** (our mission), **Login/Sign Up** (your account), **Quiz** (take the assessment + Temper Scale), and **Explore Platform** (full feature tour). The **Contact** section is at the bottom of the Home page!";
+    reply = "Scientific temper is approaching all claims with evidence, scepticism, and rational inquiry. Article 51A(h) of the Indian Constitution makes it a fundamental duty of every citizen! 🇮🇳";
+  } else if (msg.includes('dimension') || msg.includes('measure')) {
+    reply = "We assess 6 dimensions: Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, and Misinformation Resistance!";
+  } else if (msg.includes('page') || msg.includes('navigate') || msg.includes('where')) {
+    reply = "SciTemper pages: **Home** → **About** → **Login/Sign Up** → **Quiz + Temper Scale** → **Explore Platform**. The **Contact** section is at the bottom of the Home page!";
   }
 
   history.push({ role: 'assistant', content: reply });
