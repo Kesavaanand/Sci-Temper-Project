@@ -1,18 +1,27 @@
 /**
- * SciTemper — Auth Backend
- * Node.js + Express | Secure user auth with OTP verification
+ * SciTemper — Auth Backend + AI Chat Server
+ * Node.js + Express + Socket.io | Secure user auth with OTP verification
  */
 
-const express  = require('express');
-const bcrypt   = require('bcrypt');
-const cors     = require('cors');
-const mongoose = require('mongoose');
-const path     = require('path');
-const dns      = require('dns');
-// Using Resend API for email (no SMTP needed)
+const express    = require('express');
+const bcrypt     = require('bcrypt');
+const cors       = require('cors');
+const mongoose   = require('mongoose');
+const path       = require('path');
+const dns        = require('dns');
+const http       = require('http');
+const { Server } = require('socket.io');
 const twilio     = require('twilio');
 
-const app  = express();
+const app    = express();
+const server = http.createServer(app);   // ← wrap Express in http.Server for Socket.io
+const io     = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+  // Keep-alive settings so Render free tier doesn't drop sockets
+  pingTimeout:  60000,
+  pingInterval: 25000,
+});
+
 const PORT = process.env.PORT || 3000;
 
 // ─── Email via SendGrid API ───────────────────────────────────────────────────
@@ -41,7 +50,6 @@ async function sendEmail(to, subject, html) {
 }
 
 // ─── Twilio Verify Client ─────────────────────────────────────────────────────
-// Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in Render environment variables
 const TWILIO_SERVICE_SID = 'VAf66ad6a5c075d0b65b847961ec941b85';
 let twilioClient = null;
 if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
@@ -51,28 +59,10 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
   console.warn('⚠️   Twilio env vars not set — SMS will be skipped, falling back to email');
 }
 
-/**
- * sendOTP — sends OTP via BOTH SMS (Twilio Verify) AND email simultaneously.
- *
- * IMPORTANT — Two separate codes are in play:
- *   • SMS  : Twilio Verify generates its OWN code and sends it to the phone.
- *            Verify via twilioClient.verify.v2.services(...).verificationChecks
- *   • Email: Our locally generated `otp` from otpStore is sent here.
- *            Verify via validateOTP() / otpStore.
- *
- * The user can use EITHER code to authenticate. Both channels fire in parallel.
- *
- * @param {string} phone  — E.164 number e.g. "+919876543210" (may be empty string)
- * @param {string} email  — user email address
- * @param {string} otp    — locally generated OTP (sent via email)
- * @param {string} label  — display label e.g. 'Verify Your Account' or 'Login OTP'
- * @returns {{ channels: string[] }}  — list of channels that succeeded
- */
 async function sendOTP(phone, email, otp, label = 'OTP') {
   const channels = [];
   const errors   = [];
 
-  // ── Fire SMS via Twilio Verify (Twilio generates its own code)
   if (phone && twilioClient) {
     try {
       await twilioClient.verify.v2
@@ -87,7 +77,6 @@ async function sendOTP(phone, email, otp, label = 'OTP') {
     }
   }
 
-  // ── Always send email as well (carries our local OTP from otpStore)
   try {
     await sendEmail(
       email,
@@ -119,15 +108,15 @@ async function sendOTP(phone, email, otp, label = 'OTP') {
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));  // ← Serves all your HTML/CSS/JS files
+app.use(express.static(path.join(__dirname)));
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-const OTP_EXPIRY_MS   = 5 * 60 * 1000;   // 5 minutes
+const OTP_EXPIRY_MS   = 5 * 60 * 1000;
 const MAX_LOGIN_TRIES = 3;
 const SALT_ROUNDS     = 10;
 
 // ─── MongoDB Connection ────────────────────────────────────────────────────────
-mongoose.connect(process.env.MONGODB_URI)  // ← Reads from Render environment variable
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅  Connected to MongoDB (scitemper)'))
   .catch(e  => { console.error('❌  MongoDB connection error:', e); process.exit(1); });
 
@@ -139,44 +128,24 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   createdAt:    { type: Date,   default: Date.now },
 });
-
 const User = mongoose.model('User', userSchema);
 
-// ─── OTP Schema & Model (persisted — survives server restarts) ─────────────────
+// ─── OTP Schema & Model ────────────────────────────────────────────────────────
 const otpSchema = new mongoose.Schema({
-  email:   { type: String, required: true, unique: true },
-  otp:     { type: String, required: true },
-  type:    { type: String, required: true },
-  expires: { type: Number, required: true },
+  email:    { type: String, required: true, unique: true },
+  otp:      { type: String, required: true },
+  type:     { type: String, required: true },
+  expires:  { type: Number, required: true },
   verified: { type: Boolean, default: false },
 });
 const OTPRecord = mongoose.model('OTPRecord', otpSchema);
 
 // ─── In-memory stores ──────────────────────────────────────────────────────────
-/**
- * otpStore  — holds active OTPs (registration & login)
- * Shape: { [email]: { otp, expires, type: 'register'|'login' } }
- *
- * ⚠️  WARNING: This store is in-memory only. If the server restarts (e.g. Render
- * free-tier spin-down), all pending OTPs are lost and users will see
- * "OTP not found" even if they enter the correct code. For production,
- * persist OTPs in MongoDB or Redis.
- */
-const otpStore = {};
-
-/**
- * pendingUsers — temporarily holds unverified registrations
- * Shape: { [email]: { username, email, passwordHash } }
- */
+const otpStore     = {};
 const pendingUsers = {};
-
-/**
- * loginAttempts — tracks failed login attempts per email
- * Shape: { [email]: { count, lockedUntil } }
- */
 const loginAttempts = {};
 
-// ─── OTP helpers (DB-backed — survives server restarts) ───────────────────────
+// ─── OTP helpers ──────────────────────────────────────────────────────────────
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -189,13 +158,11 @@ async function storeOTP(email, type) {
     { otp, type, expires, verified: false },
     { upsert: true, new: true }
   );
-  // Keep in-memory mirror for backward compat with sync checks
   otpStore[email] = { otp, expires, type };
   return otp;
 }
 
 async function validateOTP(email, otp, expectedType) {
-  // Check DB first (survives restarts), fall back to in-memory
   let entry = null;
   try {
     const record = await OTPRecord.findOne({ email });
@@ -203,7 +170,6 @@ async function validateOTP(email, otp, expectedType) {
       entry = { otp: record.otp, expires: record.expires, type: record.type, verified: record.verified };
     }
   } catch (_) {
-    // DB unavailable — fall back to in-memory store
     entry = otpStore[email] || null;
   }
   if (!entry)                           return { valid: false, reason: 'OTP not found — please request a new one.' };
@@ -233,7 +199,7 @@ function recordFailedAttempt(email) {
   if (!loginAttempts[email]) loginAttempts[email] = { count: 0, lockedUntil: null };
   loginAttempts[email].count++;
   if (loginAttempts[email].count >= MAX_LOGIN_TRIES) {
-    loginAttempts[email].lockedUntil = Date.now() + OTP_EXPIRY_MS; // lock for 5 min
+    loginAttempts[email].lockedUntil = Date.now() + OTP_EXPIRY_MS;
     loginAttempts[email].count = 0;
   }
 }
@@ -242,12 +208,10 @@ function clearLoginAttempts(email) {
   delete loginAttempts[email];
 }
 
-// ─── Validation helper ─────────────────────────────────────────────────────────
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// ─── Response helper ───────────────────────────────────────────────────────────
 const ok  = (res, message, data = null) =>
   res.json({ success: true,  message, ...(data && { data }) });
 
@@ -256,12 +220,169 @@ const err = (res, message, status = 400) =>
 
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  AI CHAT — Socket.io handler
+//  Uses Anthropic API. Set ANTHROPIC_API_KEY in Render environment variables.
+//  Falls back to rule-based answers if the key is missing.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Per-socket conversation history (in-memory, cleared on disconnect)
+const chatHistories = new Map();
+
+// Rate limit: max 20 messages per socket per session
+const CHAT_MSG_LIMIT = 20;
+const chatMsgCount   = new Map();
+
+const SCITEMPER_SYSTEM_PROMPT = `You are SciBot, the friendly AI assistant for SciTemper — a scientific literacy platform that helps users measure and grow their scientific temper.
+
+Your role:
+- Answer questions about scientific temper, the SciTemper platform, the quiz, and scientific topics
+- Help users understand their quiz results and what they mean
+- Give short, clear, encouraging replies (2-4 sentences max unless the question needs more detail)
+- Be warm, encouraging, and enthusiastic about science
+- Guide users to relevant platform features (quiz, temper scale, registration, login)
+
+Platform facts:
+- SciTemper assesses 6 dimensions: Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, Misinformation Resistance
+- 5 Temper Levels: Novice → Curious → Informed → Analytical → Scientific
+- The quiz has 5 sample questions drawn from a 30-question bank
+- Article 51A(h) of the Indian Constitution calls for scientific temper in every citizen
+- Users must be logged in to take the full assessment
+
+If someone asks about something completely unrelated to science or the platform, gently redirect them back to SciTemper topics.`;
+
+async function getAIReply(socketId, userMessage) {
+  // Build conversation history
+  if (!chatHistories.has(socketId)) {
+    chatHistories.set(socketId, []);
+  }
+  const history = chatHistories.get(socketId);
+  history.push({ role: 'user', content: userMessage });
+
+  // Keep last 10 turns to avoid token bloat
+  const trimmedHistory = history.slice(-10);
+
+  // Try Anthropic API
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key':         process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'Content-Type':      'application/json',
+        },
+        body: JSON.stringify({
+          model:      'claude-haiku-4-5-20251001',   // fast + cheap for chat
+          max_tokens: 400,
+          system:     SCITEMPER_SYSTEM_PROMPT,
+          messages:   trimmedHistory,
+        }),
+      });
+
+      if (response.ok) {
+        const data  = await response.json();
+        const reply = data.content[0].text;
+        history.push({ role: 'assistant', content: reply });
+        return reply;
+      } else {
+        console.warn('[Chat AI] Anthropic API error:', response.status);
+      }
+    } catch (fetchErr) {
+      console.warn('[Chat AI] Fetch error:', fetchErr.message);
+    }
+  }
+
+  // ── Fallback: rule-based replies (works even without API key)
+  const msg = userMessage.toLowerCase();
+  let reply = "I'm here to help with anything about SciTemper or scientific literacy! What would you like to know?";
+
+  if (msg.includes('quiz') || msg.includes('assessment') || msg.includes('test')) {
+    reply = "Our sample quiz has 5 questions from a 30-question bank covering 6 dimensions of scientific thinking. Log in first, then hit 'Take Free Assessment' to get started! 🔬";
+  } else if (msg.includes('level') || msg.includes('temper') || msg.includes('score')) {
+    reply = "SciTemper has 5 levels: Novice → Curious → Informed → Analytical → Scientific. Each level reflects how deeply you reason from evidence. Complete the quiz to see where you land! 📊";
+  } else if (msg.includes('register') || msg.includes('sign up') || msg.includes('account')) {
+    reply = "Creating an account is free! Click 'Login' in the nav bar and then choose Sign Up. You'll verify with an OTP sent to your email. 🎉";
+  } else if (msg.includes('login') || msg.includes('log in') || msg.includes('password')) {
+    reply = "Head to the Login page from the nav bar. Enter your credentials and verify with the OTP sent to your email. Forgot your password? Use the 'Forgot Password' link! 🔑";
+  } else if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
+    reply = "Hello! 👋 I'm SciBot, your guide on SciTemper. I can help you understand scientific temper, navigate the platform, or answer science questions. What's on your mind?";
+  } else if (msg.includes('what is') && msg.includes('scientific temper')) {
+    reply = "Scientific temper is the disposition to approach all claims with evidence, scepticism, and rational inquiry. Article 51A(h) of the Indian Constitution actually makes it a fundamental duty of every citizen! 🇮🇳";
+  } else if (msg.includes('dimension') || msg.includes('measure') || msg.includes('assess')) {
+    reply = "We assess 6 dimensions: Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, and Misinformation Resistance. Each gives you a unique slice of your scientific mind!";
+  }
+
+  history.push({ role: 'assistant', content: reply });
+  return reply;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  Socket.io connection handler
+// ──────────────────────────────────────────────────────────────────────────────
+io.on('connection', (socket) => {
+  console.log(`[Chat] Client connected: ${socket.id}`);
+  chatMsgCount.set(socket.id, 0);
+
+  // Send welcome message
+  socket.emit('bot_message', {
+    text: "👋 Hi! I'm **SciBot**, your SciTemper assistant. Ask me anything about scientific temper, the quiz, your results, or science in general!",
+    timestamp: Date.now(),
+  });
+
+  socket.on('user_message', async (data) => {
+    const text = (data && typeof data.text === 'string') ? data.text.trim() : '';
+
+    // Guard: empty message
+    if (!text) return;
+
+    // Guard: message too long
+    if (text.length > 500) {
+      socket.emit('bot_message', { text: "Please keep your message under 500 characters.", timestamp: Date.now() });
+      return;
+    }
+
+    // Guard: rate limit per session
+    const count = (chatMsgCount.get(socket.id) || 0) + 1;
+    chatMsgCount.set(socket.id, count);
+    if (count > CHAT_MSG_LIMIT) {
+      socket.emit('bot_message', {
+        text: "You've reached the message limit for this session. Please refresh to start a new chat! 🔄",
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    // Emit typing indicator
+    socket.emit('bot_typing', true);
+
+    try {
+      const reply = await getAIReply(socket.id, text);
+      socket.emit('bot_typing', false);
+      socket.emit('bot_message', { text: reply, timestamp: Date.now() });
+    } catch (e) {
+      console.error('[Chat] Error generating reply:', e.message);
+      socket.emit('bot_typing', false);
+      socket.emit('bot_message', {
+        text: "Sorry, I ran into a hiccup! Please try again. 🙏",
+        timestamp: Date.now(),
+      });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`[Chat] Client disconnected: ${socket.id}`);
+    chatHistories.delete(socket.id);
+    chatMsgCount.delete(socket.id);
+  });
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  ROUTE 1 — POST /register
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/register', async (req, res) => {
   const { username, email, phone, password } = req.body;
 
-  // ── Input validation
   if (!username || !email || !password)
     return err(res, 'All fields (username, email, password) are required.');
 
@@ -274,7 +395,6 @@ app.post('/register', async (req, res) => {
   if (username.trim().length < 3)
     return err(res, 'Username must be at least 3 characters long.');
 
-  // ── Check for duplicate email / username in confirmed users
   try {
     const emailExists = await User.findOne({ email: email.toLowerCase() });
     if (emailExists)
@@ -289,7 +409,6 @@ app.post('/register', async (req, res) => {
     return err(res, 'Server error while checking existing accounts.', 500);
   }
 
-  // ── Hash password and hold user in pending store
   try {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     pendingUsers[email.toLowerCase()] = {
@@ -302,18 +421,11 @@ app.post('/register', async (req, res) => {
     return err(res, 'Server error while processing registration.', 500);
   }
 
-  // ── Generate and store OTP
   const otp = await storeOTP(email.toLowerCase(), 'register');
 
-  // ── Send OTP via both SMS and email
   let regChannels = ['email'];
   try {
-    const result = await sendOTP(
-      phone || '',
-      email.toLowerCase(),
-      otp,
-      'Verify Your Account'
-    );
+    const result = await sendOTP(phone || '', email.toLowerCase(), otp, 'Verify Your Account');
     regChannels = result.channels;
   } catch (e) {
     console.error('OTP send error:', e.message);
@@ -328,7 +440,7 @@ app.post('/register', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE 2 — POST /verify-otp  (complete registration)
+//  ROUTE 2 — POST /verify-otp
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/verify-otp', async (req, res) => {
   const { email, otp } = req.body;
@@ -337,16 +449,12 @@ app.post('/verify-otp', async (req, res) => {
     return err(res, 'Email and OTP are required.');
 
   const normalEmail = email.toLowerCase();
-
-  // ── OTP valid → move from pending to confirmed users
   const pending = pendingUsers[normalEmail];
   if (!pending)
     return err(res, 'No pending registration found. Please register again.');
 
-  // ── Check local OTP (email channel) first
   const localResult = await validateOTP(normalEmail, otp, 'register');
 
-  // ── If local fails AND user has a phone, also check Twilio (SMS channel)
   let verified = localResult.valid;
   if (!verified && pending.phone && twilioClient) {
     try {
@@ -376,7 +484,6 @@ app.post('/verify-otp', async (req, res) => {
     return err(res, 'Server error while saving account.', 500);
   }
 
-  // Cleanup
   delete pendingUsers[normalEmail];
   await clearOTP(normalEmail);
 
@@ -388,7 +495,7 @@ app.post('/verify-otp', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE 3 — POST /login  (step 1: credentials check)
+//  ROUTE 3 — POST /login
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -408,7 +515,6 @@ app.post('/login', async (req, res) => {
   if (!user)
     return err(res, 'Invalid credentials.', 401);
 
-  // ── Check account lock
   const lock = checkLoginLock(user.email);
   if (lock.locked)
     return err(res,
@@ -416,7 +522,6 @@ app.post('/login', async (req, res) => {
       429
     );
 
-  // ── Verify password
   let match;
   try {
     match = await bcrypt.compare(password, user.passwordHash);
@@ -426,7 +531,7 @@ app.post('/login', async (req, res) => {
 
   if (!match) {
     recordFailedAttempt(user.email);
-    const attempts = loginAttempts[user.email]?.count ?? 1;
+    const attempts  = loginAttempts[user.email]?.count ?? 1;
     const remaining = MAX_LOGIN_TRIES - attempts;
     return err(res,
       remaining > 0
@@ -436,19 +541,12 @@ app.post('/login', async (req, res) => {
     );
   }
 
-  // ── Credentials correct — generate login OTP
   clearLoginAttempts(user.email);
   const otp = await storeOTP(user.email, 'login');
 
-  // Send OTP via both SMS and email
   let loginChannels = ['email'];
   try {
-    const result = await sendOTP(
-      user.phone || '',
-      user.email,
-      otp,
-      'Login OTP'
-    );
+    const result = await sendOTP(user.phone || '', user.email, otp, 'Login OTP');
     loginChannels = result.channels;
   } catch (e) {
     console.error('OTP send error:', e.message);
@@ -457,13 +555,13 @@ app.post('/login', async (req, res) => {
   ok(res, `Credentials verified. OTP sent via ${loginChannels.join(' and ')}.`, {
     email: user.email,
     channels: loginChannels,
-    note:  'OTP expires in 5 minutes. Use the OTP from SMS or email.',
+    note: 'OTP expires in 5 minutes. Use the OTP from SMS or email.',
   });
 });
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE 4 — POST /verify-login-otp  (step 2: OTP check → logged in)
+//  ROUTE 4 — POST /verify-login-otp
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/verify-login-otp', async (req, res) => {
   const { email, otp } = req.body;
@@ -473,7 +571,6 @@ app.post('/verify-login-otp', async (req, res) => {
 
   const normalEmail = email.toLowerCase();
 
-  // ── Find user first so we have their phone for Twilio check
   let user;
   try {
     user = await User.findOne({ email: normalEmail });
@@ -484,10 +581,8 @@ app.post('/verify-login-otp', async (req, res) => {
   if (!user)
     return err(res, 'User not found.', 404);
 
-  // ── Check local OTP (email channel) first
   const localResult = await validateOTP(normalEmail, otp, 'login');
 
-  // ── If local fails AND user has a phone, also check Twilio (SMS channel)
   let verified = localResult.valid;
   if (!verified && user.phone && twilioClient) {
     try {
@@ -505,7 +600,6 @@ app.post('/verify-login-otp', async (req, res) => {
   if (!verified)
     return err(res, localResult.reason || 'Incorrect OTP.', 401);
 
-  // ── OTP valid
   await clearOTP(normalEmail);
 
   ok(res, 'Login successful! Welcome back.', {
@@ -516,7 +610,7 @@ app.post('/verify-login-otp', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  BONUS ROUTE — POST /resend-otp
+//  ROUTE 5 — POST /resend-otp
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/resend-otp', async (req, res) => {
   const { email, type } = req.body;
@@ -527,11 +621,9 @@ app.post('/resend-otp', async (req, res) => {
 
   const normalEmail = email.toLowerCase();
 
-  // For registration: pending user must exist
   if (type === 'register' && !pendingUsers[normalEmail])
     return err(res, 'No pending registration found for this email. Please register first.');
 
-  // For login: confirmed user must exist
   if (type === 'login') {
     try {
       const user = await User.findOne({ email: normalEmail });
@@ -544,8 +636,6 @@ app.post('/resend-otp', async (req, res) => {
 
   const otp = await storeOTP(normalEmail, type);
 
-  // Send OTP: SMS first, email fallback
-  // Retrieve phone for confirmed users (login resend); pending users may have phone too
   let resendPhone = '';
   if (type === 'login') {
     try {
@@ -567,13 +657,13 @@ app.post('/resend-otp', async (req, res) => {
   ok(res, `A new OTP has been sent via ${resendChannels.join(' and ')}.`, {
     email: normalEmail,
     channels: resendChannels,
-    note:  'New OTP expires in 5 minutes. Use the OTP from SMS or email.',
+    note: 'New OTP expires in 5 minutes. Use the OTP from SMS or email.',
   });
 });
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  BONUS ROUTE — GET /users  (dev only — list all registered users)
+//  ROUTE — GET /users  (dev only)
 // ══════════════════════════════════════════════════════════════════════════════
 app.get('/users', async (req, res) => {
   try {
@@ -586,7 +676,7 @@ app.get('/users', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE — POST /check-email  (validate email domain via DNS MX lookup)
+//  ROUTE — POST /check-email
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/check-email', async (req, res) => {
   const { email } = req.body;
@@ -594,8 +684,8 @@ app.post('/check-email', async (req, res) => {
     return res.json({ valid: false });
 
   const domain = email.split('@')[1];
-  dns.resolveMx(domain, (err, addresses) => {
-    if (err || !addresses || addresses.length === 0) {
+  dns.resolveMx(domain, (dnsErr, addresses) => {
+    if (dnsErr || !addresses || addresses.length === 0) {
       return res.json({ valid: false });
     }
     res.json({ valid: true });
@@ -604,7 +694,7 @@ app.post('/check-email', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE — POST /forgot-password  (step 1: send reset OTP to email)
+//  ROUTE — POST /forgot-password
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
@@ -621,7 +711,6 @@ app.post('/forgot-password', async (req, res) => {
     return err(res, 'Server error.', 500);
   }
 
-  // Always respond with success to prevent email enumeration attacks
   if (!user) {
     return ok(res, 'If that email is registered, a reset code has been sent.');
   }
@@ -652,7 +741,7 @@ app.post('/forgot-password', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE — POST /verify-reset-otp  (step 2: confirm OTP before allowing reset)
+//  ROUTE — POST /verify-reset-otp
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/verify-reset-otp', async (req, res) => {
   const { email, otp } = req.body;
@@ -666,7 +755,6 @@ app.post('/verify-reset-otp', async (req, res) => {
   if (!result.valid)
     return err(res, result.reason || 'Invalid or expired reset code.', 401);
 
-  // Mark OTP as verified in both DB and in-memory store
   try { await OTPRecord.findOneAndUpdate({ email: normalEmail }, { verified: true }); } catch (_) {}
   if (otpStore[normalEmail]) otpStore[normalEmail].verified = true;
 
@@ -675,7 +763,7 @@ app.post('/verify-reset-otp', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE — POST /reset-password  (step 3: set the new password)
+//  ROUTE — POST /reset-password
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/reset-password', async (req, res) => {
   const { email, newPassword } = req.body;
@@ -688,7 +776,6 @@ app.post('/reset-password', async (req, res) => {
 
   const normalEmail = email.toLowerCase();
 
-  // Ensure OTP was verified in this session (check DB first, then in-memory)
   let entry = otpStore[normalEmail] || null;
   try {
     const dbRecord = await OTPRecord.findOne({ email: normalEmail });
@@ -727,14 +814,14 @@ app.post('/reset-password', async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ROUTE — POST /send-assessment-link  (contact page → send link to any email)
+//  ROUTE — POST /send-assessment-link
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/send-assessment-link', async (req, res) => {
   const { email } = req.body;
   if (!email || !isValidEmail(email))
     return err(res, 'A valid email is required.');
 
-  const siteUrl = process.env.SITE_URL || 'https://scitemper.onrender.com';
+  const siteUrl        = process.env.SITE_URL || 'https://scitemper.onrender.com';
   const assessmentLink = `${siteUrl}/quiz.html`;
 
   try {
@@ -764,9 +851,9 @@ app.post('/send-assessment-link', async (req, res) => {
 app.use((req, res) => err(res, `Route ${req.method} ${req.path} not found.`, 404));
 
 
-// ─── Start server ──────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n✅  SciTemper Auth Server running on port ${PORT}`);
+// ─── Start server (use `server.listen`, NOT `app.listen`) ─────────────────────
+server.listen(PORT, () => {
+  console.log(`\n✅  SciTemper Server running on port ${PORT}`);
   console.log(`\n  Endpoints:`);
   console.log(`    POST /register          — Register new user`);
   console.log(`    POST /verify-otp        — Verify registration OTP`);
@@ -774,5 +861,6 @@ app.listen(PORT, () => {
   console.log(`    POST /verify-login-otp  — Login (step 2: OTP)`);
   console.log(`    POST /resend-otp        — Resend any OTP`);
   console.log(`    GET  /users             — List users (dev only)`);
+  console.log(`    WS   Socket.io          — AI chat on /`);
   console.log(`\n  Database: ${process.env.MONGODB_URI}\n`);
 });
