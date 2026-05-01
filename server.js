@@ -235,20 +235,28 @@ const chatMsgCount   = new Map();
 const SCITEMPER_SYSTEM_PROMPT = `You are SciBot, the friendly AI assistant for SciTemper — a scientific literacy platform that helps users measure and grow their scientific temper.
 
 Your role:
-- Answer questions about scientific temper, the SciTemper platform, the quiz, and scientific topics
-- Help users understand their quiz results and what they mean
+- Answer questions about the SciTemper platform, its pages, features, the quiz, scientific temper, and general science topics
+- Help users navigate the platform and understand what each section/page does
 - Give short, clear, encouraging replies (2-4 sentences max unless the question needs more detail)
 - Be warm, encouraging, and enthusiastic about science
-- Guide users to relevant platform features (quiz, temper scale, registration, login)
 
-Platform facts:
-- SciTemper assesses 6 dimensions: Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, Misinformation Resistance
+Platform pages & features:
+- **Home (index.html)**: The main landing page. Shows what SciTemper measures, a radar chart of the 6 assessment dimensions, platform stats, and a contact/email sign-up section at the bottom.
+- **About (about.html)**: Information about SciTemper's mission, the team, and the science behind the platform.
+- **Login (login-page.html)**: Users log in with username + password, then verify with an OTP sent to their email. Two-step secure login.
+- **Sign Up (Sign-Up.html)**: Free registration — enter username, email, phone (optional), and password. An OTP is sent to verify the email before the account is activated.
+- **Quiz / Temper Scale (quiz.html)**: A 5-question sample assessment drawn from a 30-question bank. After completing it, the user's level is highlighted on the Scientific Temper Spectrum (Novice → Curious → Informed → Analytical → Scientific). Users must be logged in to access the full assessment.
+- **Explore Platform (explore.html)**: A deeper look at all platform features — full assessment, learning paths, progress tracking, and resources for educators and researchers.
+- **Contact**: Not a separate page — it's the section at the bottom of the Home page (scroll down or click "Contact" in the nav). Users can enter their email to receive the assessment link directly in their inbox. The email used is kesavaanand2257@gmail.com for platform correspondence.
+- **Temper Scale**: Visible on quiz.html — shows 5 levels: Novice, Curious, Informed, Analytical, Scientific. Users can click any level to read what it means.
+
+Assessment facts:
+- 6 dimensions assessed: Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, Misinformation Resistance
 - 5 Temper Levels: Novice → Curious → Informed → Analytical → Scientific
-- The quiz has 5 sample questions drawn from a 30-question bank
+- 30-question bank, 5 shown per session (randomised)
 - Article 51A(h) of the Indian Constitution calls for scientific temper in every citizen
-- Users must be logged in to take the full assessment
 
-If someone asks about something completely unrelated to science or the platform, gently redirect them back to SciTemper topics.`;
+If someone asks about something completely unrelated to science or the platform (e.g. cooking recipes, sports scores), gently let them know you're focused on SciTemper and science topics.`;
 
 async function getAIReply(socketId, userMessage) {
   // Build conversation history
@@ -296,20 +304,28 @@ async function getAIReply(socketId, userMessage) {
   const msg = userMessage.toLowerCase();
   let reply = "I'm here to help with anything about SciTemper or scientific literacy! What would you like to know?";
 
-  if (msg.includes('quiz') || msg.includes('assessment') || msg.includes('test')) {
+  if (msg.includes('contact')) {
+    reply = "The Contact section is at the bottom of the Home page — just scroll down or click 'Contact' in the nav bar. Enter your email there and we'll send you the assessment link directly to your inbox! 📧";
+  } else if (msg.includes('explore') || msg.includes('explore platform')) {
+    reply = "The **Explore Platform** page (explore.html) gives you a full tour of SciTemper's features — including the complete assessment, personalised learning paths, progress tracking, and resources for educators. Click 'Explore Platform' on the home page to check it out! 🚀";
+  } else if (msg.includes('quiz') || msg.includes('assessment') || msg.includes('test')) {
     reply = "Our sample quiz has 5 questions from a 30-question bank covering 6 dimensions of scientific thinking. Log in first, then hit 'Take Free Assessment' to get started! 🔬";
-  } else if (msg.includes('level') || msg.includes('temper') || msg.includes('score')) {
-    reply = "SciTemper has 5 levels: Novice → Curious → Informed → Analytical → Scientific. Each level reflects how deeply you reason from evidence. Complete the quiz to see where you land! 📊";
-  } else if (msg.includes('register') || msg.includes('sign up') || msg.includes('account')) {
-    reply = "Creating an account is free! Click 'Login' in the nav bar and then choose Sign Up. You'll verify with an OTP sent to your email. 🎉";
-  } else if (msg.includes('login') || msg.includes('log in') || msg.includes('password')) {
-    reply = "Head to the Login page from the nav bar. Enter your credentials and verify with the OTP sent to your email. Forgot your password? Use the 'Forgot Password' link! 🔑";
+  } else if (msg.includes('level') || msg.includes('temper scale') || msg.includes('spectrum') || msg.includes('score')) {
+    reply = "SciTemper has 5 levels: **Novice → Curious → Informed → Analytical → Scientific**. Each level reflects how deeply you reason from evidence. Complete the quiz to see where you land! 📊";
+  } else if (msg.includes('register') || msg.includes('sign up') || msg.includes('account') || msg.includes('create')) {
+    reply = "Creating an account is free! Click 'Login' in the nav bar and then choose Sign Up. Enter your username, email, and password — you'll get an OTP to verify your email before your account is activated. 🎉";
+  } else if (msg.includes('login') || msg.includes('log in') || msg.includes('password') || msg.includes('forgot')) {
+    reply = "Head to the Login page from the nav bar. Enter your credentials and verify with the OTP sent to your email. Forgot your password? Use the 'Forgot Password' link on the login page! 🔑";
+  } else if (msg.includes('about')) {
+    reply = "The About page covers SciTemper's mission — helping every Indian citizen develop scientific temper as called for by Article 51A(h) of the Constitution. Click 'About' in the nav bar to read more! 🇮🇳";
   } else if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
-    reply = "Hello! 👋 I'm SciBot, your guide on SciTemper. I can help you understand scientific temper, navigate the platform, or answer science questions. What's on your mind?";
-  } else if (msg.includes('what is') && msg.includes('scientific temper')) {
-    reply = "Scientific temper is the disposition to approach all claims with evidence, scepticism, and rational inquiry. Article 51A(h) of the Indian Constitution actually makes it a fundamental duty of every citizen! 🇮🇳";
+    reply = "Hello! 👋 I'm SciBot, your guide on SciTemper. Ask me about any page on the platform, the quiz, your results, or scientific temper in general. What's on your mind?";
+  } else if (msg.includes('scientific temper')) {
+    reply = "Scientific temper is the disposition to approach all claims with evidence, scepticism, and rational inquiry. Article 51A(h) of the Indian Constitution makes it a fundamental duty of every citizen! 🇮🇳";
   } else if (msg.includes('dimension') || msg.includes('measure') || msg.includes('assess')) {
     reply = "We assess 6 dimensions: Conceptual Literacy, Critical Thinking, Statistical Reasoning, Scientific Method, Science-Society Interface, and Misinformation Resistance. Each gives you a unique slice of your scientific mind!";
+  } else if (msg.includes('page') || msg.includes('section') || msg.includes('navigate') || msg.includes('where')) {
+    reply = "SciTemper has these pages: **Home** (overview), **About** (our mission), **Login/Sign Up** (your account), **Quiz** (take the assessment + Temper Scale), and **Explore Platform** (full feature tour). The **Contact** section is at the bottom of the Home page!";
   }
 
   history.push({ role: 'assistant', content: reply });
