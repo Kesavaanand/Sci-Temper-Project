@@ -221,7 +221,7 @@ const err = (res, message, status = 400) =>
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  AI CHAT — Socket.io handler
-//  Uses Anthropic API. Set ANTHROPIC_API_KEY in Render environment variables.
+//  Uses Gemini API (free). Set GEMINI_API_KEY in Render environment variables.
 //  Falls back to rule-based answers if the key is missing.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -269,34 +269,39 @@ async function getAIReply(socketId, userMessage) {
   // Keep last 10 turns to avoid token bloat
   const trimmedHistory = history.slice(-10);
 
-  // Try Anthropic API
-  if (process.env.ANTHROPIC_API_KEY) {
+  // Try Gemini API (free tier — 1,500 requests/day)
+  if (process.env.GEMINI_API_KEY) {
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key':         process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'Content-Type':      'application/json',
-        },
-        body: JSON.stringify({
-          model:      'claude-haiku-4-5-20251001',   // fast + cheap for chat
-          max_tokens: 400,
-          system:     SCITEMPER_SYSTEM_PROMPT,
-          messages:   trimmedHistory,
-        }),
-      });
+      // Convert history to Gemini format (uses 'model' instead of 'assistant')
+      const geminiContents = trimmedHistory.map(m => ({
+        role:  m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: SCITEMPER_SYSTEM_PROMPT }] },
+            contents:           geminiContents,
+            generationConfig:   { maxOutputTokens: 400, temperature: 0.7 },
+          }),
+        }
+      );
 
       if (response.ok) {
         const data  = await response.json();
-        const reply = data.content[0].text;
+        const reply = data.candidates[0].content.parts[0].text;
         history.push({ role: 'assistant', content: reply });
         return reply;
       } else {
-        console.warn('[Chat AI] Anthropic API error:', response.status);
+        const errData = await response.json().catch(() => ({}));
+        console.warn('[Chat AI] Gemini error:', response.status, JSON.stringify(errData));
       }
     } catch (fetchErr) {
-      console.warn('[Chat AI] Fetch error:', fetchErr.message);
+      console.warn('[Chat AI] Gemini fetch error:', fetchErr.message);
     }
   }
 
