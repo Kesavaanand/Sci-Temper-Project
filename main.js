@@ -596,6 +596,7 @@ function showScore() {
   // 0→Novice, 1→Curious, 2→Informed, 3→Analytical, 4-5→Scientific
   var levelMap = [0, 1, 2, 3, 4, 4];
   userLevel = levelMap[Math.min(score, 5)];
+  sessionStorage.setItem('quizUserLevel', userLevel);
 
   var lvl = temperData[userLevel];
   document.getElementById('score-level').innerHTML = lvl.name;
@@ -702,5 +703,19 @@ function toggleMobileNav() {
 
 //  Boot 
 if (document.getElementById('quiz-body')) {
-  resetQuiz();
+  var savedLevel = sessionStorage.getItem('quizUserLevel');
+  if (savedLevel !== null) {
+    userLevel = parseInt(savedLevel);
+    resetQuiz();
+    document.getElementById('quiz-body').style.display   = 'none';
+    document.getElementById('quiz-footer').style.display = 'none';
+    document.getElementById('score-display').className   = 'score-display visible';
+    document.getElementById('score-num').innerHTML       = userLevel + 1;
+    var lvl = temperData[userLevel];
+    document.getElementById('score-level').innerHTML = lvl.title;
+    document.getElementById('score-desc').innerHTML  = lvl.desc;
+    highlightTemperLevel(userLevel);
+  } else {
+    resetQuiz();
+  }
 }
