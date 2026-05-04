@@ -597,6 +597,7 @@ function showScore() {
   var levelMap = [0, 1, 2, 3, 4, 4];
   userLevel = levelMap[Math.min(score, 5)];
   sessionStorage.setItem('quizUserLevel', userLevel);
+  sessionStorage.setItem('quizScore', score);
 
   var lvl = temperData[userLevel];
   document.getElementById('score-level').innerHTML = lvl.name;
@@ -704,16 +705,33 @@ function toggleMobileNav() {
 //  Boot 
 if (document.getElementById('quiz-body')) {
   var savedLevel = sessionStorage.getItem('quizUserLevel');
-  if (savedLevel !== null) {
+  var savedScore = sessionStorage.getItem('quizScore');
+  if (savedLevel !== null && savedScore !== null) {
+    // Restore previous quiz result without calling resetQuiz() first
     userLevel = parseInt(savedLevel);
-    resetQuiz();
+    score     = parseInt(savedScore);
+    questions = buildQuestionSet(); // needed so resetQuiz works if user clicks "Try New Questions"
+
+    // Show score screen directly
     document.getElementById('quiz-body').style.display   = 'none';
     document.getElementById('quiz-footer').style.display = 'none';
     document.getElementById('score-display').className   = 'score-display visible';
-    document.getElementById('score-num').innerHTML       = userLevel + 1;
+    document.getElementById('score-num').innerHTML       = score;
+
+    // Animate score ring
+    var offset = 364 - (364 * (score / 5));
+    setTimeout(function() {
+      var c = document.getElementById('score-circle');
+      c.style.strokeDashoffset = offset;
+      c.style.transition       = 'stroke-dashoffset 1.2s ease';
+    }, 100);
+
+    // Show level info
     var lvl = temperData[userLevel];
-    document.getElementById('score-level').innerHTML = lvl.title;
+    document.getElementById('score-level').innerHTML = lvl.title || '';
     document.getElementById('score-desc').innerHTML  = lvl.desc;
+
+    // Highlight temper scale
     highlightTemperLevel(userLevel);
   } else {
     resetQuiz();
